@@ -37,3 +37,7 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# We don't want to upload the input data or outputs to Github to ensure privacy and security of survey data
+input/
+output/
