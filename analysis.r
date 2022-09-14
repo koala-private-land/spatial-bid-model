@@ -974,9 +974,16 @@ PredictionsY.10yr <- get.predy.list(Model_MatrixY.10yr, CoefsY.10yr, 6)
 PredictionsZ.10yr <- get.predxz.list(Model_MatrixZ.10yr, CoefsZ.10yr, 6)
 
 # compile predictions and write to csv
-Compiled_Predictions_Inf <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX.Inf$Mean, MeanWTA = PredictionsY.Inf$Mean, MeanProp = PredictionsZ.Inf$Mean))
+Compiled_Predictions_Inf <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX.Inf$Mean, MeanWTA = PredictionsY.Inf$Mean, MeanProp = PredictionsZ.Inf$Mean,
+                                SDAdopt = PredictionsX.Inf$SD, SDWTA = PredictionsY.Inf$SD, SDProp = PredictionsZ.Inf$SD,
+                                LowerAdopt = PredictionsX.Inf$Lower, LowerWTA = PredictionsY.Inf$Lower, LowerProp = PredictionsZ.Inf$Lower,
+                                UpperAdopt = PredictionsX.Inf$Upper, UpperWTA = PredictionsY.Inf$Upper, UpperProp = PredictionsZ.Inf$Upper))
 write.csv(Compiled_Predictions_Inf, file = "output/predictions/spatial_predictions_inf.csv", row.names = FALSE)
-Compiled_Predictions_10yr <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX.10yr$Mean, MeanWTA = PredictionsY.10yr$Mean, MeanProp = PredictionsZ.10yr$Mean))
+
+Compiled_Predictions_10yr <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX.10yr$Mean, MeanWTA = PredictionsY.10yr$Mean, MeanProp = PredictionsZ.10yr$Mean,
+                                SDAdopt = PredictionsX.10yr$SD, SDWTA = PredictionsY.10yr$SD, SDProp = PredictionsZ.10yr$SD,
+                                LowerAdopt = PredictionsX.10yr$Lower, LowerWTA = PredictionsY.10yr$Lower, LowerProp = PredictionsZ.10yr$Lower,
+                                UpperAdopt = PredictionsX.10yr$Upper, UpperWTA = PredictionsY.10yr$Upper, UpperProp = PredictionsZ.10yr$Upper))
 write.csv(Compiled_Predictions_10yr, file = "output/predictions/spatial_predictions_10yr.csv", row.names = FALSE)
 
 -------------------- FROM HERE ON OLD STUFF AND MODEL VISUALISATION - NEEDS TO BE WORKED ON - 17th August 2022 -----------------------
