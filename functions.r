@@ -29,12 +29,18 @@ get.jags.sel <- function(Data)
 	return(fit)
 }
 
-get.predxz <- function(Data, Coefs)
+get.predxz <- function(Row, Data, Coefs)
 {
-
-	# get predictions
-	Preds <- Data %*% t(Coefs)
-	Preds <- exp(Preds) / (1 + exp(Preds))
+	for (i in 1:length(Data)) {
+		# get predictions
+		PredsTemp <- Data[[i]][Row, ] %*% t(Coefs[[i]])
+		PredsTemp <- exp(PredsTemp) / (1 + exp(PredsTemp))
+		if (i == 1) {
+				Preds <- PredsTemp
+		} else {
+			Preds <- c(Preds, PredsTemp)
+		}
+	}
 
 	# expected value
 	Mean <- mean(Preds, na.rm = TRUE)
@@ -46,11 +52,17 @@ get.predxz <- function(Data, Coefs)
 	return(tibble(Mean = Mean, SD = SD, Lower = HDI[1], Upper = HDI[2]))
 }
 
-get.predy <- function(Data, Coefs)
+get.predy <- function(Row, Data, Coefs)
 {
-
-	# get predictions
-	Preds <- Data %*% t(Coefs)
+	for (i in 1:length(Data)) {
+		# get predictions
+		PredsTemp <- Data[[i]][Row, ] %*% t(Coefs[[i]])
+		if (i == 1) {
+				Preds <- PredsTemp
+		} else {
+			Preds <- c(Preds, PredsTemp)
+		}
+	}
 
 	# expected value
 	Mean <- mean(Preds, na.rm = TRUE)
@@ -62,21 +74,28 @@ get.predy <- function(Data, Coefs)
 	return(tibble(Mean = Mean, SD = SD, Lower = HDI[1], Upper = HDI[2]))
 }
 
-get.predxz.exp <- function(Data, Coefs)
+get.predxz.list <- function(DataList, CoefsList, NumCores)
 {
+	cl <- makeCluster(NumCores)
+	clusterExport(cl, varlist = c("DataList", "CoefsList", "get.predxz"), envir = environment())
+	clusterEvalQ(cl, library("HDInterval"))
+	clusterEvalQ(cl, library("tidyverse"))
+	Predictions <- parApply(cl, as.matrix(1:nrow(DataList[[1]])), MARGIN = 1, FUN = get.predxz, Data = DataList, Coefs = CoefsList)
+	stopCluster(cl)
+	Predictions <- do.call("rbind", Predictions)
 
-	# get predictions
-	Preds <- Data %*% as.matrix(Coefs)
-	Preds <- exp(Preds) / (1 + exp(Preds))
-
-	return(tibble(Mean = Preds))
+	return(as_tibble(Predictions))
 }
 
-get.predy.exp <- function(Data, Coefs)
+get.predy.list <- function(DataList, CoefsList, NumCores)
 {
+	cl <- makeCluster(NumCores)
+	clusterExport(cl, varlist = c("DataList", "CoefsList", "get.predy"), envir = environment())
+	clusterEvalQ(cl, library("HDInterval"))
+	clusterEvalQ(cl, library("tidyverse"))
+	Predictions <- parApply(cl, as.matrix(1:nrow(DataList[[1]])), MARGIN = 1, FUN = get.predy, Data = DataList, Coefs = CoefsList)
+	stopCluster(cl)
+	Predictions <- do.call("rbind", Predictions)
 
-	# get predictions
-	Preds <- Data %*% as.matrix(Coefs)
-
-	return(tibble(Mean = Preds))
+	return(as_tibble(Predictions))
 }

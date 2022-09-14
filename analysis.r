@@ -803,11 +803,26 @@ Preds_Properties_New$LUSec <- relevel(Preds_Properties_New$LUSec, "OTHER")
 # remove any properties where we have NAs
 Preds_Properties_New <- na.omit(Preds_Properties_New)
 
-# make sure elevations are greater than zero so we can log them - set anything <= 0 to 0.01 m as an approximation (this is only a small proportion of the properties)
+# make sure elevations are greater than zero so we can log them - set anything <= 0 to 0.01 m as an approximation (note that this is only affects a small proportion of the properties)
 Preds_Properties_New$ELEV[which(Preds_Properties_New$ELEV <= 0)] <- 0.01
 
-# set the number of samples to draw from the full MCMC chains
+# set the number of samples to draw from the full MCMC chains for each imputed data set
 NumSamples <- 10000
+
+# set up lists to store data and coefficients for predictions
+
+CoefsX.Inf <- list()
+CoefsY.Inf <- list()
+CoefsZ.Inf <- list()
+Model_MatrixX.Inf <- list()
+Model_MatrixY.Inf <- list()
+Model_MatrixZ.Inf <- list()
+CoefsX.10yr <- list()
+CoefsY.10yr <- list()
+CoefsZ.10yr <- list()
+Model_MatrixX.10yr <- list()
+Model_MatrixY.10yr <- list()
+Model_MatrixZ.10yr <- list()
 
 # loop through each data imputation replicate and make predictions
   for (i in 1:m) {
@@ -828,9 +843,9 @@ NumSamples <- 10000
 
     # get coefficient values for individual MCMC draws
     MCMC_Draws <- as_tibble(as.mcmc(Jags.Fits.Sel.Inf[[i]]))
-    CoefsX <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsX]
-    CoefsY <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsY]
-    CoefsZ <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsZ]
+    CoefsX.Inf[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsX]
+    CoefsY.Inf[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsY]
+    CoefsZ.Inf[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsZ]
 
     # compile data for predictions
     Predictions_DataX <- Preds_Properties_New %>% dplyr::select(-NewPropID, - PGRASS) %>% mutate(
@@ -870,62 +885,14 @@ NumSamples <- 10000
                           TRI = as.vector(scale(log(TRI), center = attr(IndPreds.Inf.Z[[i]]$TRI,"scaled:center"), scale = attr(IndPreds.Inf.Z[[i]]$TRI,"scaled:scale"))),
                           SCAP = as.vector(scale(SCAP, center = attr(IndPreds.Inf.Z[[i]]$SCAP,"scaled:center"), scale = attr(IndPreds.Inf.Z[[i]]$SCAP,"scaled:scale"))))
 
-    # generate predictions - expected coefficient estimates
+    # get model matrices
 
     # adoption
-    Model_MatrixX <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataX)
-    PredictionsExpX <- get.predxz.exp(Model_MatrixX, CoefsExpX)
-
+    Model_MatrixX.Inf[[i]] <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataX)
     # wta
-    Model_MatrixY <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataY)
-    PredictionsExpY <- get.predy.exp(Model_MatrixY, CoefsExpY)
-
+    Model_MatrixY.Inf[[i]] <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataY)
     # proportion
-    Model_MatrixZ <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataZ)
-    PredictionsExpZ <- get.predxz.exp(Model_MatrixZ, CoefsExpZ)
-
-    # compile predictions and write to csv
-    Compiled_Predictions_Inf_Exp <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX$Mean, MeanWTA = PredictionsY$Mean, MeanProp = PredictionsZ$Mean))
-    write.csv(Compiled_Predictions_Inf_Exp, file=paste("output/predictions/spatial_predictions_inf_exp", i, ".csv", sep = ""), row.names = FALSE)
-
-    # generate predictions - MCMC Draws
-
-    # adoption
-    Model_MatrixX <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataX)
-    cl <- makeCluster(6)
-    clusterExport(cl, varlist = c("Model_MatrixX", "CoefsX", "get.predxz"))
-    clusterEvalQ(cl, library("HDInterval"))
-    clusterEvalQ(cl, library("tidyverse"))
-    PredictionsX <- parApply(cl, Model_MatrixX, MARGIN = 1, FUN = get.predxz, Coefs = CoefsX)
-    stopCluster (cl)
-    PredictionsX <- do.call("rbind", PredictionsX)
-
-    # wta
-    Model_MatrixY <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataY)
-    cl <- makeCluster(6)
-    clusterExport(cl, varlist = c("Model_MatrixY", "CoefsY", "get.predy"))
-    clusterEvalQ(cl, library("HDInterval"))
-    clusterEvalQ(cl, library("tidyverse"))
-    PredictionsY <- parApply(cl, Model_MatrixY, MARGIN = 1, FUN = get.predy, Coefs = CoefsY)
-    stopCluster (cl)
-    PredictionsY <- do.call("rbind", PredictionsY)
-
-    # proportion
-    Model_MatrixZ <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataZ)
-    cl <- makeCluster(6)
-    clusterExport(cl, varlist = c("Model_MatrixZ", "CoefsZ", "get.predxz"))
-    clusterEvalQ(cl, library("HDInterval"))
-    clusterEvalQ(cl, library("tidyverse"))
-    PredictionsZ <- parApply(cl, Model_MatrixZ, MARGIN = 1, FUN = get.predxz, Coefs = CoefsZ)
-    stopCluster (cl)
-    PredictionsZ <- do.call("rbind", PredictionsZ)
-
-    # compile predictions and write to csv
-    Compiled_Predictions_Inf <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX$Mean, MeanWTA = PredictionsY$Mean, MeanProp = PredictionsZ$Mean,
-                                SDAdopt = PredictionsX$SD, SDWTA = PredictionsY$SD, SDProp = PredictionsZ$SD,
-                                LowerAdopt = PredictionsX$Lower, LowerWTA = PredictionsY$Lower, LowerProp = PredictionsZ$Lower,
-                                UpperAdopt = PredictionsX$Upper, UpperWTA = PredictionsY$Upper, UpperProp = PredictionsZ$Upper))
-    write.csv(Compiled_Predictions_Inf, file=paste("output/predictions/spatial_predictions_inf", i, ".csv", sep = ""), row.names = FALSE)
+    Model_MatrixZ.Inf[[i]] <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataZ)
 
     # 10 year model
 
@@ -943,9 +910,9 @@ NumSamples <- 10000
 
     # get coefficient values for individual MCMC draws
     MCMC_Draws <- as_tibble(as.mcmc(Jags.Fits.Sel.10yr[[i]]))
-    CoefsX <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsX]
-    CoefsY <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsY]
-    CoefsZ <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsZ]
+    CoefsX.10yr[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsX]
+    CoefsY.10yr[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsY]
+    CoefsZ.10yr[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), CoefIDsZ]
 
     # compile data for predictions
     Predictions_DataX <- Preds_Properties_New %>% dplyr::select(-NewPropID, - PGRASS) %>% mutate(
@@ -985,63 +952,32 @@ NumSamples <- 10000
                           TRI = as.vector(scale(log(TRI), center = attr(IndPreds.10yr.Z[[i]]$TRI,"scaled:center"), scale = attr(IndPreds.10yr.Z[[i]]$TRI,"scaled:scale"))),
                           SCAP = as.vector(scale(SCAP, center = attr(IndPreds.10yr.Z[[i]]$SCAP,"scaled:center"), scale = attr(IndPreds.10yr.Z[[i]]$SCAP,"scaled:scale"))))
 
-    # generate predictions - expected coefficient estimates
+    # get model matrices
 
     # adoption
-    Model_MatrixX <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataX)
-    PredictionsExpX <- get.predxz.exp(Model_MatrixX, CoefsExpX)
-
+    Model_MatrixX.10yr[[i]] <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataX)
     # wta
-    Model_MatrixY <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataY)
-    PredictionsExpY <- get.predy.exp(Model_MatrixY, CoefsExpY)
-
+    Model_MatrixY.10yr[[i]] <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataY)
     # proportion
-    Model_MatrixZ <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataZ)
-    PredictionsExpZ <- get.predxz.exp(Model_MatrixZ, CoefsExpZ)
-
-    # compile predictions and write to csv
-    Compiled_Predictions_10yr_Exp <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX$Mean, MeanWTA = PredictionsY$Mean, MeanProp = PredictionsZ$Mean))
-    write.csv(Compiled_Predictions_10yr_Exp, file=paste("output/predictions/spatial_predictions_10yr_exp", i, ".csv", sep = ""), row.names = FALSE)
-
-    # generate predictions - MCMC Draws
-
-    # adoption
-    Model_MatrixX <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataX)
-    cl <- makeCluster(6)
-    clusterExport(cl, varlist = c("Model_MatrixX", "CoefsX", "get.predxz"))
-    clusterEvalQ(cl, library("HDInterval"))
-    clusterEvalQ(cl, library("tidyverse"))
-    PredictionsX <- parApply(cl, Model_MatrixX, MARGIN = 1, FUN = get.predxz, Coefs = CoefsX)
-    stopCluster (cl)
-    PredictionsX <- do.call("rbind", PredictionsX)
-
-    # wta
-    Model_MatrixY <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataY)
-    cl <- makeCluster(6)
-    clusterExport(cl, varlist = c("Model_MatrixY", "CoefsY", "get.predy"))
-    clusterEvalQ(cl, library("HDInterval"))
-    clusterEvalQ(cl, library("tidyverse"))
-    PredictionsY <- parApply(cl, Model_MatrixY, MARGIN = 1, FUN = get.predy, Coefs = CoefsY)
-    stopCluster (cl)
-    PredictionsY <- do.call("rbind", PredictionsY)
-
-    # proportion
-    Model_MatrixZ <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataZ)
-    cl <- makeCluster(6)
-    clusterExport(cl, varlist = c("Model_MatrixZ", "CoefsZ", "get.predxz"))
-    clusterEvalQ(cl, library("HDInterval"))
-    clusterEvalQ(cl, library("tidyverse"))
-    PredictionsZ <- parApply(cl, Model_MatrixZ, MARGIN = 1, FUN = get.predxz, Coefs = CoefsZ)
-    stopCluster (cl)
-    PredictionsZ <- do.call("rbind", PredictionsZ)
-
-    # compile predictions and write to csv
-    Compiled_Predictions_10yr <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX$Mean, MeanWTA = PredictionsY$Mean, MeanProp = PredictionsZ$Mean,
-                                SDAdopt = PredictionsX$SD, SDWTA = PredictionsY$SD, SDProp = PredictionsZ$SD,
-                                LowerAdopt = PredictionsX$Lower, LowerWTA = PredictionsY$Lower, LowerProp = PredictionsZ$Lower,
-                                UpperAdopt = PredictionsX$Upper, UpperWTA = PredictionsY$Upper, UpperProp = PredictionsZ$Upper))
-    write.csv(Compiled_Predictions_10yr, file=paste("output/predictions/spatial_predictions_10yr", i, ".csv", sep = ""), row.names = FALSE)
+    Model_MatrixZ.10yr[[i]] <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP + DIM1 + DIM2 + DIM3 + DIM4 + DIM5, data = Predictions_DataZ)
 }
+
+# load functions
+source("functions.r")
+
+# get predictions
+PredictionsX.Inf <- get.predxz.list(Model_MatrixX.Inf, CoefsX.Inf, 6)
+PredictionsY.Inf <- get.predy.list(Model_MatrixY.Inf, CoefsY.Inf, 6)
+PredictionsZ.Inf <- get.predxz.list(Model_MatrixZ.Inf, CoefsZ.Inf, 6)
+PredictionsX.10yr <- get.predxz.list(Model_MatrixX.10yr, CoefsX.10yr, 6)
+PredictionsY.10yr <- get.predy.list(Model_MatrixY.10yr, CoefsY.10yr, 6)
+PredictionsZ.10yr <- get.predxz.list(Model_MatrixZ.10yr, CoefsZ.10yr, 6)
+
+# compile predictions and write to csv
+Compiled_Predictions_Inf <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX.Inf$Mean, MeanWTA = PredictionsY.Inf$Mean, MeanProp = PredictionsZ.Inf$Mean))
+write.csv(Compiled_Predictions_Inf, file = "output/predictions/spatial_predictions_inf.csv", row.names = FALSE)
+Compiled_Predictions_10yr <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = PredictionsX.10yr$Mean, MeanWTA = PredictionsY.10yr$Mean, MeanProp = PredictionsZ.10yr$Mean))
+write.csv(Compiled_Predictions_10yr, file = "output/predictions/spatial_predictions_10yr.csv", row.names = FALSE)
 
 -------------------- FROM HERE ON OLD STUFF AND MODEL VISUALISATION - NEEDS TO BE WORKED ON - 17th August 2022 -----------------------
 
