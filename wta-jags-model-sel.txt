@@ -72,19 +72,19 @@ model {
     for (j in CATFROM[i]:CATTO[i]) {
       # X model
       gamma_gl_x[j] ~ dbern(p_gl)
-      #gammac_gl_x[j] <- (1 - eta_g_x[CATIND[j]]) * 0 + (eta_g_x[CATIND[j]] * gamma_gl_x[j]) # this step seems unnecessary?
+      gammac_gl_x[j] <- (1 - eta_g_x[CATIND[j]]) * 0 + (eta_g_x[CATIND[j]] * gamma_gl_x[j])
       b_x[j] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
-      beta_x[j] <- (1 - (eta_g_x[CATIND[j]] * gamma_gl_x[j])) * 0 + (eta_g_x[CATIND[j]] * gamma_gl_x[j] * b_x[j])
+      beta_x[j] <- (1 - (eta_g_x[CATIND[j]] * gammac_gl_x[j])) * 0 + (eta_g_x[CATIND[j]] * gammac_gl_x[j] * b_x[j])
       # Y model
       gamma_gl_y[j] ~ dbern(p_gl)
-      #gammac_gl_y[j] <- (1 - eta_g_y[CATIND[j]]) * 0 + (eta_g_y[CATIND[j]] * gamma_gl_y[j]) # this step seems unnecessary?
+      gammac_gl_y[j] <- (1 - eta_g_y[CATIND[j]]) * 0 + (eta_g_y[CATIND[j]] * gamma_gl_y[j])
       b_y[j] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
-      beta_y[j] <- (1 - (eta_g_y[CATIND[j]] * gamma_gl_y[j])) * 0 + (eta_g_y[CATIND[j]] * gamma_gl_y[j] * b_y[j])
+      beta_y[j] <- (1 - (eta_g_y[CATIND[j]] * gammac_gl_y[j])) * 0 + (eta_g_y[CATIND[j]] * gammac_gl_y[j] * b_y[j])
       # Z model
       gamma_gl_z[j] ~ dbern(p_gl)
-      #gammac_gl_z[j] <- (1 - eta_g_z[CATIND[j]]) * 0 + (eta_g_z[CATIND[j]] * gamma_gl_z[j]) # this step seems unnecessary?
+      gammac_gl_z[j] <- (1 - eta_g_z[CATIND[j]]) * 0 + (eta_g_z[CATIND[j]] * gamma_gl_z[j])
       b_z[j] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
-      beta_z[j] <- (1 - (eta_g_z[CATIND[j]] * gamma_gl_z[j])) * 0 + (eta_g_z[CATIND[j]] * gamma_gl_z[j] * b_z[j])
+      beta_z[j] <- (1 - (eta_g_z[CATIND[j]] * gammac_gl_z[j])) * 0 + (eta_g_z[CATIND[j]] * gammac_gl_z[j] * b_z[j])
     }
   }
 
