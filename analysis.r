@@ -15,6 +15,7 @@ library(HDInterval)
 library(PerformanceAnalytics)
 library(tidybayes)
 library(mice)
+library(purrr)
 
 # load functions
 source("functions.r")
@@ -35,6 +36,7 @@ Preds_Properties <- read_csv("input/predictors/props_properties_predictors_table
 
 # compile survey responses and remove responses not from property owner or manager, not complete, or not consented
 # also remove known test responses and responses known to be outside of NSW and ACT
+# also remove responses that took less than or equal to 5 minutes to complete
 
 # compile pure
 
@@ -49,9 +51,10 @@ Compiled_Pure <- Pure %>%
                          !ResponseId %in% c("R_1gGR9du45NBxZ8R","R_2qazcFdKqVkwWm8","R_3FQfz9x5dlG9wsk","R_2v0pQY8Rt3QQidj","R_SBmhZPkdUQBn2Ex","R_2v7CVYBE0fOPfWu",
                                         "R_6rnbTpeqDfSQJBD","R_1dMSdc29URnPMDr","R_21FykEy7kg1Ej5H","R_4Sp7PggnX8qhq2R","R_eyyz22mPeHHxpIt","R_2sax0wr9wrNxApT",
                                         "R_3hrn4WXTGp8gg7Y","R_2bK4iv8qKMQNA4J","R_2too9cnr5g2jcCM","R_Rn9yZKCGInAM1iN","R_3rOqczF7y6wNhLj","R_1rpOP8hEQ6O4oNc",
-                                        "R_1hXwRWiRPFHA1Ng","R_2sandcSYmsTFtNw")) # [COLUMN: ResponseId] remove response IDs outside of NSW: R_1gGR9du45NBxZ8R, R_2qazcFdKqVkwWm8, R_3FQfz9x5dlG9wsk, R_2v0pQY8Rt3QQidj, R_SBmhZPkdUQBn2Ex, R_2v7CVYBE0fOPfWu
+                                        "R_1hXwRWiRPFHA1Ng","R_2sandcSYmsTFtNw"), # [COLUMN: ResponseId] remove response IDs outside of NSW: R_1gGR9du45NBxZ8R, R_2qazcFdKqVkwWm8, R_3FQfz9x5dlG9wsk, R_2v0pQY8Rt3QQidj, R_SBmhZPkdUQBn2Ex, R_2v7CVYBE0fOPfWu
                                                                              # R_6rnbTpeqDfSQJBD, R_1dMSdc29URnPMDr, R_21FykEy7kg1Ej5H, R_4Sp7PggnX8qhq2R, R_eyyz22mPeHHxpIt, R_2sax0wr9wrNxApT, R_3hrn4WXTGp8gg7Y, R_2bK4iv8qKMQNA4J
                                                                              # R_2too9cnr5g2jcCM, R_Rn9yZKCGInAM1iN, R_3rOqczF7y6wNhLj, R_1rpOP8hEQ6O4oNc, R_1hXwRWiRPFHA1Ng, R_2sandcSYmsTFtNw
+                                         `Duration (in seconds)` > 300)     # remove responses that took less than 5 minutes to complete
 write.csv(Compiled_Pure, file="output/compiled_survey_data/pure_responses_compiled.csv", row.names = FALSE)
 
 # compile bct
@@ -62,7 +65,8 @@ Compiled_BCT <- BCT %>%
                          Q2.1 == "I consent",                 # [COLUMN: Q2.1] remove 'I do not consent'
                          Q3.6 !="", Q3.6 !="No",              # [COLUMN: Q3.6] remove if not property manager etc
                          Status != "Survey Preview",          # [COLUMN: Status] remove preview items
-                         !ResponseId %in% c("R_1hZ19EtGQ8is0qe","R_3EQmDdj6NdFrjiL")) # [COLUMN: ResponseId] remove response IDs outside NSW or used for testing: R_1hZ19EtGQ8is0qe, R_3EQmDdj6NdFrjiL
+                         !ResponseId %in% c("R_1hZ19EtGQ8is0qe","R_3EQmDdj6NdFrjiL"), # [COLUMN: ResponseId] remove response IDs outside NSW or used for testing: R_1hZ19EtGQ8is0qe, R_3EQmDdj6NdFrjiL
+                          `Duration (in seconds)` > 300)     # remove responses that took less than 5 minutes to complete
 write.csv(Compiled_BCT, file="output/compiled_survey_data/bct_responses_compiled.csv", row.names = FALSE)
 
 # compile mail
@@ -73,7 +77,8 @@ Compiled_Mail <- Mail %>%
                          Q2.1 == "I consent",                 # [COLUMN: Q2.1] remove 'I do not consent'
                          Q3.6 !="", Q3.6 !="No",              # [COLUMN: Q3.6] remove if not property manager etc
                          Status != "Survey Preview",          # [COLUMN: Status] remove preview items
-                         !Q83 %in% c("123456","345678","234567","456789","222","333","777","AAAA","BBBB","CCCC")) # [COLUMN: Q83] remove tests: 123456 (Test), 345678 (QLD), 234567 (Test), 456789 (Test), 222, 333, 777, AAAA, BBBB, CCCC
+                         !Q83 %in% c("123456","345678","234567","456789","222","333","777","AAAA","BBBB","CCCC"), # [COLUMN: Q83] remove tests: 123456 (Test), 345678 (QLD), 234567 (Test), 456789 (Test), 222, 333, 777, AAAA, BBBB, CCCC
+                         `Duration (in seconds)` > 300)     # remove responses that took less than 5 minutes to complete
 write.csv(Compiled_Mail, file="output/compiled_survey_data/mail_responses_compiled.csv", row.names = FALSE)
 
 # join response geocoded locations and remove cases that are in urban or intensive use areas. Here we remove cases where the associated
@@ -120,15 +125,15 @@ Selected_Mail <- Compiled_Mail_NotIntensive_Location_Only %>% dplyr::select(Resp
                     arrange(RecordedDate) %>% mutate(AreaHa = Q3.4, AreaAc = Q3.5, WTAInf = trimws(as.character(Q8.4)), WTATen = trimws(as.character(Q8.6)),
                     PropInf = ifelse(Q8.5 >= 0 & Q8.5 <= 100, Q8.5 / 100, NA), PropTen = ifelse(Q8.7 >= 0 & Q8.7 <= 100, Q8.7 / 100, NA)) %>%
                     dplyr::select(ResponseId, RecordedDate, Lat, Long, Address, NewPropID, SA1_7DIG16, KMR, AreaHa, AreaAc, WTAInf, WTATen, PropInf, PropTen)
+
 # fix non-numeric area data on mailout survey
-Selected_Mail <- Selected_Mail %>% mutate(AreaHa = as_numeric(if_else(AreaHa == "2.2ha", "2.2", AreaHa)))
+Selected_Mail <- Selected_Mail %>% mutate(AreaHa = as.numeric(if_else(AreaHa == "2.2ha", "2.2", AreaHa)))
 
 # compile all selected
 Selected_All <- rbind(Selected_Pure, Selected_BCT, Selected_Mail) %>% arrange(RecordedDate)
 
 # remove duplicates based on address
 Selected_All <- Selected_All[!duplicated(Selected_All$Address), ]
-write.csv(Selected_All, file="output/compiled_survey_data/all_selected.csv", row.names = FALSE)
 
 # join to response data
 Selected_All <- Selected_All %>% left_join(Preds_Responses, "NewPropID") %>% dplyr::select(-OID_, -Shape_Length, -Shape_Area)
@@ -196,8 +201,8 @@ KMR_IDLookUp <- Selected_All %>% group_by(KMR) %>% summarise(ObsCount = n()) %>%
 # join IDs for KMRs to survey data - to use for random-effects if needed
 Selected_All <- Selected_All %>% left_join(KMR_IDLookUp, by = c("KMR")) %>% dplyr::select(-ObsCount)
 
-# save property level data
-write.csv(Selected_All, file="output/compiled_survey_data/selected_all.csv", row.names = FALSE)
+# save data used for fitting model
+write.csv(Selected_All, file="output/compiled_survey_data/all_selected_for_model.csv", row.names = FALSE)
 
 # extract data we need to fit the models
 Data_Model_Fit <- Selected_All %>% dplyr::select(WTAInf, PropInf, WTATen, PropTen, Area, LValHa, MosType, LUSec, DistMU, DistOU, PropNatTree, PropNatGrass, Condition, Connectivity, Elevation, Slope, TRIndex, SoilCap, SA1ID, KMR, KMRID)
@@ -587,7 +592,7 @@ Corr_Cont <- cor(TestCorData %>% dplyr::select(-KMR, -MosType, -LUSec), use = "c
 write.csv(Corr_Cont, file="output/collinearity/cor_cont.csv")
 
 # check collinearity among categorical variables
-# all are significantly correlated but have left in for now given each categorical variable represents a different characteristic
+# all are significantly correlated but have left in given each categorical variable represents a different characteristic
 # KMR represents region, LUSec represents how land holders use the land, and MOSType represents landholder demographics
 # KMR vs MOSType
 Cases1 <- TestCorData %>% dplyr::select(KMR, MosType)
@@ -754,7 +759,7 @@ sfStop()
 #Jags.Fits.Sel.10yr <- get.jags.sel(data.10yr.Sel[[1]])
 
 # export models fits to the output folder
-saveRDS(Jags.Fits.Sel.10yr, file = "output/jags/Jags_Fits_Sel.10yr.rds")
+saveRDS(Jags.Fits.Sel.10yr, file = "output/jags/Jags_Fits_Sel_10yr.rds")
 
 # PREDICTIONS
 
@@ -986,7 +991,82 @@ Compiled_Predictions_10yr <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = P
                                 UpperAdopt = PredictionsX.10yr$Upper, UpperWTA = PredictionsY.10yr$Upper, UpperProp = PredictionsZ.10yr$Upper))
 write.csv(Compiled_Predictions_10yr, file = "output/predictions/spatial_predictions_10yr.csv", row.names = FALSE)
 
--------------------- FROM HERE ON OLD STUFF AND MODEL VISUALISATION - NEEDS TO BE WORKED ON - 17th August 2022 -----------------------
+# COEFFICIENT PLOTS
+
+# load functions
+source("functions.r")
+
+# load models if needed
+Jags.Fits.Sel.Inf <- readRDS("output/jags/Jags_Fits_Sel_Inf.rds")
+Jags.Fits.Sel.10yr <- readRDS("output/jags/Jags_Fits_Sel_10yr.rds")
+
+# set the number of samples to draw from the full MCMC chains for each imputed data set
+NumSamples <- 10000
+
+# set up lists to store data and coefficients for predictions
+
+ParamsX.Inf <- list()
+ParamsY.Inf <- list()
+ParamsZ.Inf <- list()
+ParamsX.10yr <- list()
+ParamsY.10yr <- list()
+ParamsZ.10yr <- list()
+
+# loop through each data imputation replicate and get parameter draws
+for (i in 1:m) {
+
+  # In-perpetuity model
+
+  # get expected coefficient values
+  SummaryVals <- summary(Jags.Fits.Sel.Inf[[i]])
+  ParamIDsX <- c(which(dimnames(SummaryVals)[[1]] == "betasa_x[1]"), which(dimnames(SummaryVals)[[1]] == "beta_x[1]"):which(dimnames(SummaryVals)[[1]] == "beta_x[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "betasa_x[2]"):which(dimnames(SummaryVals)[[1]] == "betasa_x[6]"),
+                  which(dimnames(SummaryVals)[[1]] == "eta_g_x[1]"):which(dimnames(SummaryVals)[[1]] == "eta_g_x[3]"),
+                  which(dimnames(SummaryVals)[[1]] == "gamma_gl_x[15]"):which(dimnames(SummaryVals)[[1]] == "gamma_gl_x[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "gammasa_gl_x[2]"):which(dimnames(SummaryVals)[[1]] == "gammasa_gl_x[6]"))
+  ParamIDsY <- c(which(dimnames(SummaryVals)[[1]] == "betasa_y[1]"), which(dimnames(SummaryVals)[[1]] == "beta_y[1]"):which(dimnames(SummaryVals)[[1]] == "beta_y[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "betasa_y[2]"):which(dimnames(SummaryVals)[[1]] == "betasa_y[6]"),
+                  which(dimnames(SummaryVals)[[1]] == "eta_g_y[1]"):which(dimnames(SummaryVals)[[1]] == "eta_g_y[3]"),
+                  which(dimnames(SummaryVals)[[1]] == "gamma_gl_y[15]"):which(dimnames(SummaryVals)[[1]] == "gamma_gl_y[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "gammasa_gl_y[2]"):which(dimnames(SummaryVals)[[1]] == "gammasa_gl_y[6]"))
+  ParamIDsZ <- c(which(dimnames(SummaryVals)[[1]] == "betasa_z[1]"), which(dimnames(SummaryVals)[[1]] == "beta_z[1]"):which(dimnames(SummaryVals)[[1]] == "beta_z[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "betasa_z[2]"):which(dimnames(SummaryVals)[[1]] == "betasa_z[6]"),
+                  which(dimnames(SummaryVals)[[1]] == "eta_g_z[1]"):which(dimnames(SummaryVals)[[1]] == "eta_g_z[3]"),
+                  which(dimnames(SummaryVals)[[1]] == "gamma_gl_z[15]"):which(dimnames(SummaryVals)[[1]] == "gamma_gl_z[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "gammasa_gl_z[2]"):which(dimnames(SummaryVals)[[1]] == "gammasa_gl_z[6]"))
+
+  # get coefficient values for individual MCMC draws
+  MCMC_Draws <- as_tibble(as.mcmc(Jags.Fits.Sel.Inf[[i]]))
+  ParamsX.Inf[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), ParamIDsX]
+  ParamsY.Inf[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), ParamIDsY]
+  ParamsZ.Inf[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), ParamIDsZ]
+}
+
+# combine lists into a single tibble
+ParamsX.Inf <- map_dfr(ParamsX.Inf, bind_rows)
+ParamsY.Inf <- map_dfr(ParamsY.Inf, bind_rows)
+ParamsZ.Inf <- map_dfr(ParamsZ.Inf, bind_rows)
+
+# create meaningful column names
+names(ParamsX.Inf) <- c(paste(dimnames(Model_MatrixX.Inf[[1]])[[2]], "PARAM", sep="_"), "KMR_SELF", "MosType_SELF", "LUSec_SELF",
+                        paste(dimnames(Model_MatrixX.Inf[[1]])[[2]][16:26], "SELF", sep="_"))
+names(ParamsY.Inf) <- c(paste(dimnames(Model_MatrixY.Inf[[1]])[[2]], "PARAM", sep="_"), "KMR_SELF", "MosType_SELF", "LUSec_SELF",
+                        paste(dimnames(Model_MatrixY.Inf[[1]])[[2]][16:26], "SELF", sep="_"))
+names(ParamsZ.Inf) <- c(paste(dimnames(Model_MatrixZ.Inf[[1]])[[2]], "PARAM", sep="_"), "KMR_SELF", "MosType_SELF", "LUSec_SELF",
+                        paste(dimnames(Model_MatrixZ.Inf[[1]])[[2]][16:26], "SELF", sep="_"))
+
+# get expected values
+ParamsX.Inf.Exp <- as.matrix(colMeans(ParamsX.Inf))
+dimnames(ParamsX.Inf.Exp)[[2]] <- "Mean"
+ParamsY.Inf.Exp <- as.matrix(colMeans(ParamsY.Inf))
+dimnames(ParamsY.Inf.Exp)[[2]] <- "Mean"
+ParamsZ.Inf.Exp <- as.matrix(colMeans(ParamsZ.Inf))
+dimnames(ParamsZ.Inf.Exp)[[2]] <- "Mean"
+
+
+
+
+#-------------------- FROM HERE ON OLD STUFF AND MODEL VISUALISATION - NEEDS TO BE WORKED ON - 17th August 2022 -----------------------
 
 # COEFFICIENT PLOTS
 

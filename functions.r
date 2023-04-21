@@ -20,7 +20,8 @@ get.jags.sel <- function(Data)
   cl <- makeCluster(3) # comment out if not using parallel processing
 
   # edit methods depending on whether using parallel processing or not
-	fit <- run.jags(model="wta-jags-model-sel.txt", monitor = c("eta_g_x", "eta_g_y", "eta_g_z", "gamma_gl_x", "gamma_gl_y", "gamma_gl_z", "gammasa_gl_x", "gammasa_gl_y", "gammasa_gl_z", "beta_x", "betasa_x", "beta_y", "betasa_y",
+	fit <- run.jags(model="wta-jags-model-sel.txt", monitor = c("eta_g_x", "eta_g_y", "eta_g_z", "gammac_gl_x", "gammac_gl_y", "gammac_gl_z",
+		"gamma_gl_x", "gamma_gl_y", "gamma_gl_z", "gammasa_gl_x", "gammasa_gl_y", "gammasa_gl_z", "beta_x", "betasa_x", "beta_y", "betasa_y",
 	 	"beta_z", "betasa_z", "sig", "phi"), data = Data, n.chains = 3, inits = list(inits1,inits2,inits3), burnin = 10000, adapt = 1000, sample = 10000,
 		jags = "C:/Program Files/JAGS/JAGS-4.3.0/x64/bin/jags-terminal.exe", method = "rjparallel", cl = cl) # method = "rjags")
 
