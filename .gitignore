@@ -41,3 +41,6 @@ vignettes/*.pdf
 # We don't want to upload the input data or outputs to Github to ensure privacy and security of survey data
 input/
 output/
+
+# Pycharm configuration files
+.idea/
