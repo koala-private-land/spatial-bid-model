@@ -21,18 +21,18 @@ library(purrr)
 source("functions.r")
 
 # load raw survey response data
-Pure <- read_csv("input/survey_responses/pure_responses_20211210.csv")
-BCT <- read_csv("input/survey_responses/bct_responses_20211210.csv")
-Mail <- read_csv("input/survey_responses/mail_responses_20211210.csv")
+Pure <- read_csv("input/survey_responses/pure_responses_20211210.csv", col_types = cols(Q6.5 = col_character(), Q6.6_8_TEXT = col_character(), Q6.9_11_TEXT = col_character(), Q11.4_9_TEXT = col_character(), Q11.8_24_TEXT = col_character(), Q11.12_10_TEXT = col_character(), Screened = col_character(), Mode = col_character(), Sample = col_character()))
+BCT <- read_csv("input/survey_responses/bct_responses_20211210.csv", col_types = cols(Q6.5 = col_character(), Q11.8_24_TEXT = col_character(), Q11.12_10_TEXT = col_character(), rid = col_character(), Screened = col_character(), Mode = col_character(), Sample = col_character()))
+Mail <- read_csv("input/survey_responses/mail_responses_20211210.csv", col_types = cols(Q6.5 = col_character(), Q11.8_24_TEXT = col_character(), Q11.12_10_TEXT = col_character(), rid = col_character(), Screened = col_character(), Mode = col_character(), Sample = col_character()))
 
 # load geocodes response locations - create new field NewPropID
-Geocodes <- read_csv("input/geocodes/geocode_points_final_final_table.csv") %>% mutate(NewPropID = if_else(is.na(propid), CADID, propid))
+Geocodes <- read_csv("input/geocodes/geocode_points_final_final_table.csv", show_col_types = FALSE) %>% mutate(NewPropID = if_else(is.na(propid), CADID, propid))
 
 # load property level predictor data for responses
-Preds_Responses <- read_csv("input/predictors/props_responses_predictors_table.csv")
+Preds_Responses <- read_csv("input/predictors/props_responses_predictors_table.csv", show_col_types = FALSE)
 
 # load property level predictor data for all properties - so we can make predictions
-Preds_Properties <- read_csv("input/predictors/props_properties_predictors_table.csv")
+Preds_Properties <- read_csv("input/predictors/props_properties_predictors_table.csv", show_col_types = FALSE)
 
 # compile survey responses and remove responses not from property owner or manager, not complete, or not consented
 # also remove known test responses and responses known to be outside of NSW and ACT
@@ -149,19 +149,19 @@ Selected_All <- Selected_All %>% mutate(PropInf = if_else(WTAInf == "I would not
 
 # import and compile census data
 # import census data at SA1 level
-G01 <- read_csv("input/census/2016Census_G01_NSW_SA1.csv") %>% dplyr::select(SA1_7DIGITCODE_2016, Birthplace_Australia_P, Birthplace_Elsewhere_P, Lang_spoken_home_Eng_only_P, Lang_spoken_home_Oth_Lang_P, High_yr_schl_comp_Yr_12_eq_P, High_yr_schl_comp_Yr_12_eq_P, High_yr_schl_comp_Yr_11_eq_P, High_yr_schl_comp_Yr_10_eq_P, High_yr_schl_comp_Yr_9_eq_P, High_yr_schl_comp_Yr_8_belw_P, High_yr_schl_comp_D_n_g_sch_P, Tot_P_P) %>%
+G01 <- read_csv("input/census/2016Census_G01_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(SA1_7DIGITCODE_2016, Birthplace_Australia_P, Birthplace_Elsewhere_P, Lang_spoken_home_Eng_only_P, Lang_spoken_home_Oth_Lang_P, High_yr_schl_comp_Yr_12_eq_P, High_yr_schl_comp_Yr_12_eq_P, High_yr_schl_comp_Yr_11_eq_P, High_yr_schl_comp_Yr_10_eq_P, High_yr_schl_comp_Yr_9_eq_P, High_yr_schl_comp_Yr_8_belw_P, High_yr_schl_comp_D_n_g_sch_P, Tot_P_P) %>%
           mutate(PBirthAus = Birthplace_Australia_P / (Birthplace_Australia_P + Birthplace_Elsewhere_P), PEngLang = Lang_spoken_home_Eng_only_P / (Lang_spoken_home_Eng_only_P + Lang_spoken_home_Oth_Lang_P), PYear12Ed = High_yr_schl_comp_Yr_12_eq_P / (High_yr_schl_comp_Yr_12_eq_P + High_yr_schl_comp_Yr_11_eq_P + High_yr_schl_comp_Yr_10_eq_P + High_yr_schl_comp_Yr_9_eq_P + High_yr_schl_comp_Yr_8_belw_P +	High_yr_schl_comp_D_n_g_sch_P))
-G02 <- read_csv("input/census/2016Census_G02_NSW_SA1.csv") %>% dplyr::select(SA1_7DIGITCODE_2016, Median_age_persons, Average_household_size, Median_tot_hhd_inc_weekly, Median_mortgage_repay_monthly) %>%
+G02 <- read_csv("input/census/2016Census_G02_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(SA1_7DIGITCODE_2016, Median_age_persons, Average_household_size, Median_tot_hhd_inc_weekly, Median_mortgage_repay_monthly) %>%
           mutate(Age = Median_age_persons, HSize = Average_household_size, HInc = Median_tot_hhd_inc_weekly, MortPay = Median_mortgage_repay_monthly) %>% dplyr::select(-SA1_7DIGITCODE_2016)
-G08 <- read_csv("input/census/2016Census_G08_NSW_SA1.csv") %>% dplyr::select(SA1_7DIGITCODE_2016, Tot_P_BP_B_OS, Tot_P_Tot_Resp, Tot_P_BP_NS) %>%
+G08 <- read_csv("input/census/2016Census_G08_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(SA1_7DIGITCODE_2016, Tot_P_BP_B_OS, Tot_P_Tot_Resp, Tot_P_BP_NS) %>%
           mutate(PBornOS = Tot_P_BP_B_OS / (Tot_P_Tot_Resp - Tot_P_BP_NS)) %>% dplyr::select(-SA1_7DIGITCODE_2016)
-G25 <- read_csv("input/census/2016Census_G25_NSW_SA1.csv") %>% dplyr::select(SA1_7DIGITCODE_2016, CF_ChU15_a_Total_P, CF_no_ChU15_a_Total_P, OPF_ChU15_a_Total_P, OPF_no_ChU15_a_Total_P, Total_P) %>%
+G25 <- read_csv("input/census/2016Census_G25_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(SA1_7DIGITCODE_2016, CF_ChU15_a_Total_P, CF_no_ChU15_a_Total_P, OPF_ChU15_a_Total_P, OPF_no_ChU15_a_Total_P, Total_P) %>%
           mutate(PHComp1 = CF_ChU15_a_Total_P / Total_P, PHComp2 = CF_no_ChU15_a_Total_P / Total_P, PHComp3 = OPF_ChU15_a_Total_P / Total_P, PHComp4 = OPF_no_ChU15_a_Total_P / Total_P) %>%
           dplyr::select(-SA1_7DIGITCODE_2016)
-G46 <- bind_cols(read_csv("input/census/2016Census_G46A_NSW_SA1.csv"), read_csv("input/census/2016Census_G46B_NSW_SA1.csv") %>% dplyr::select(-SA1_7DIGITCODE_2016)) %>%
+G46 <- bind_cols(read_csv("input/census/2016Census_G46A_NSW_SA1.csv", show_col_types = FALSE), read_csv("input/census/2016Census_G46B_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(-SA1_7DIGITCODE_2016)) %>%
           dplyr::select(SA1_7DIGITCODE_2016, P_PGrad_Deg_Total, P_GradDip_and_GradCert_Total, P_BachDeg_Total, P_Tot_Total, P_Lev_Edu_NS_Total, P_Lev_Edu_IDes_Total) %>%
           mutate(PBachEd = (P_PGrad_Deg_Total + P_GradDip_and_GradCert_Total + P_BachDeg_Total) / (P_Tot_Total - P_Lev_Edu_NS_Total - P_Lev_Edu_IDes_Total)) %>% dplyr::select(-SA1_7DIGITCODE_2016)
-G53 <- bind_cols(read_csv("input/census/2016Census_G53A_NSW_SA1.csv"), read_csv("input/census/2016Census_G53B_NSW_SA1.csv") %>% dplyr::select(-SA1_7DIGITCODE_2016)) %>%
+G53 <- bind_cols(read_csv("input/census/2016Census_G53A_NSW_SA1.csv", show_col_types = FALSE), read_csv("input/census/2016Census_G53B_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(-SA1_7DIGITCODE_2016)) %>%
           dplyr::select(SA1_7DIGITCODE_2016, Agri_for_fish_Tot, Tot_Tot, ID_NS_Tot) %>%
           mutate(PAgEmploy = Agri_for_fish_Tot / (Tot_Tot - ID_NS_Tot)) %>% dplyr::select(-SA1_7DIGITCODE_2016)
 # combine census data
