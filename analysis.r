@@ -16,6 +16,7 @@ library(PerformanceAnalytics)
 library(tidybayes)
 library(mice)
 library(purrr)
+library(naniar)
 
 # load functions
 source("functions.r")
@@ -85,6 +86,7 @@ write.csv(Compiled_Mail, file="output/compiled_survey_data/mail_responses_compil
 # property (closest property) has a secondary land use (ALUM code) that is: Manufacturing and Industrial (5.3.0 - Based on [LU_Sec]) or
 # Services (5.5.0 - Based on [LU_Sec]) or has a tertiary land use (ALUM code) that is: Urban Residential (5.4.1 - Based on [LU_Tert])
 # this aims to remove responses that may be unreliable due to a mismatch between reported spatial location and the target property types
+# here we also remove the property ID for repsonses where we only have a road or street corner information for
 
 Compiled_Pure_NotIntensive <- Compiled_Pure %>% left_join(Geocodes, by = c("ResponseId" = "ResponseID")) %>% filter(!(!is.na(OID_) & (LU_Sec == "5.3.0 Manufacturing and industrial" |
                                                     LU_Sec == "5.5.0 Services" | LU_Tert == "5.4.1 Urban residential"))) %>% mutate(CADID = ifelse(LocationType == "Road" | InsideStudyArea == "No", NA, CADID)) %>% mutate(propid = ifelse(LocationType == "Road" | InsideStudyArea == "No", NA, propid)) %>% mutate(NewPropID = ifelse(LocationType == "Road" | InsideStudyArea == "No", NA, NewPropID)) %>% dplyr::select(-DistanceLot, -LocationType, -MERGE_SRC, -ha, -MosType, -MosGrp, -LU_Sec, -LU_Tert, -PostCode.y)
@@ -98,7 +100,7 @@ Compiled_Mail_NotIntensive <- Compiled_Mail %>% left_join(Geocodes, by = c("Resp
                                                       LU_Sec == "5.5.0 Services" | LU_Tert == "5.4.1 Urban residential"))) %>% mutate(CADID = ifelse(LocationType == "Road" | InsideStudyArea == "No", NA, CADID)) %>% mutate(propid = ifelse(LocationType == "Road" | InsideStudyArea == "No", NA, propid)) %>% mutate(NewPropID = ifelse(LocationType == "Road" | InsideStudyArea == "No", NA, NewPropID)) %>% dplyr::select(-DistanceLot, -LocationType, -MERGE_SRC, -ha, -MosType, -MosGrp, -LU_Sec, -LU_Tert, -PostCode.y)
 write.csv(Compiled_Mail_NotIntensive %>% dplyr::select(-OID_, -InsideStudyArea), file="output/compiled_survey_data/mail_responses_compiled_notintensive.csv", row.names = FALSE)
 
-# remove responses that we don't have a spatial location and are not inside the study area
+# remove responses that we don't have a spatial location for and are not inside the study area
 Compiled_Pure_NotIntensive_Location_Only <- Compiled_Pure_NotIntensive %>% filter(!is.na(OID_) & InsideStudyArea == "Yes") %>% dplyr::select(-OID_, -InsideStudyArea)
 write.csv(Compiled_Pure_NotIntensive_Location_Only, file="output/compiled_survey_data/pure_responses_compiled_notintensive_locationonly.csv", row.names = FALSE)
 Compiled_BCT_NotIntensive_Location_Only <- Compiled_BCT_NotIntensive %>% filter(!is.na(OID_) & InsideStudyArea == "Yes") %>% dplyr::select(-OID_, -InsideStudyArea)
@@ -150,7 +152,7 @@ Selected_All <- Selected_All %>% mutate(PropInf = if_else(WTAInf == "I would not
 # import and compile census data
 # import census data at SA1 level
 G01 <- read_csv("input/census/2016Census_G01_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(SA1_7DIGITCODE_2016, Birthplace_Australia_P, Birthplace_Elsewhere_P, Lang_spoken_home_Eng_only_P, Lang_spoken_home_Oth_Lang_P, High_yr_schl_comp_Yr_12_eq_P, High_yr_schl_comp_Yr_12_eq_P, High_yr_schl_comp_Yr_11_eq_P, High_yr_schl_comp_Yr_10_eq_P, High_yr_schl_comp_Yr_9_eq_P, High_yr_schl_comp_Yr_8_belw_P, High_yr_schl_comp_D_n_g_sch_P, Tot_P_P) %>%
-          mutate(PBirthAus = Birthplace_Australia_P / (Birthplace_Australia_P + Birthplace_Elsewhere_P), PEngLang = Lang_spoken_home_Eng_only_P / (Lang_spoken_home_Eng_only_P + Lang_spoken_home_Oth_Lang_P), PYear12Ed = High_yr_schl_comp_Yr_12_eq_P / (High_yr_schl_comp_Yr_12_eq_P + High_yr_schl_comp_Yr_11_eq_P + High_yr_schl_comp_Yr_10_eq_P + High_yr_schl_comp_Yr_9_eq_P + High_yr_schl_comp_Yr_8_belw_P +	High_yr_schl_comp_D_n_g_sch_P))
+          mutate(PBirthAus = Birthplace_Australia_P / (Birthplace_Australia_P + Birthplace_Elsewhere_P), PEngLang = Lang_spoken_home_Eng_only_P / (Lang_spoken_home_Eng_only_P + Lang_spoken_home_Oth_Lang_P), PYear12Ed = High_yr_schl_comp_Yr_12_eq_P / (High_yr_schl_comp_Yr_12_eq_P + High_yr_schl_comp_Yr_11_eq_P + High_yr_schl_comp_Yr_10_eq_P + High_yr_schl_comp_Yr_9_eq_P + High_yr_schl_comp_Yr_8_belw_P + High_yr_schl_comp_D_n_g_sch_P))
 G02 <- read_csv("input/census/2016Census_G02_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(SA1_7DIGITCODE_2016, Median_age_persons, Average_household_size, Median_tot_hhd_inc_weekly, Median_mortgage_repay_monthly) %>%
           mutate(Age = Median_age_persons, HSize = Average_household_size, HInc = Median_tot_hhd_inc_weekly, MortPay = Median_mortgage_repay_monthly) %>% dplyr::select(-SA1_7DIGITCODE_2016)
 G08 <- read_csv("input/census/2016Census_G08_NSW_SA1.csv", show_col_types = FALSE) %>% dplyr::select(SA1_7DIGITCODE_2016, Tot_P_BP_B_OS, Tot_P_Tot_Resp, Tot_P_BP_NS) %>%
@@ -488,11 +490,20 @@ DIM5 <- Data_Model_Fit_SA1 %>%
                   dplyr::select(Dim.5)
 DIM5 <- as.numeric(unlist(DIM5))
 
-# compile predictor variables and impute missing values
+# compile predictor variables and impute missing values using multiple imputation
 
 IndPredVars <- tibble(KMR, MOS, LU, AREA, LVAL, DMU, DOU, PTREE, PGRASS, COND, CONN, ELEV, SLOPE, TRI, SCAP)
 SA1PredVars <- tibble(DIM1, DIM2, DIM3, DIM4, DIM5)
 
+# inspect missing data
+IndPredVars %>% miss_var_summary()
+IndPredVars %>% miss_case_summary()
+SA1PredVars %>% miss_var_summary()
+SA1PredVars %>% miss_case_summary()
+
+# impute missing values for property level predictors
+# note that here for responses where we only have a road or street corner location information
+# we impute all property level information as we treat these as missing data
 m <- 10
 Imp <- mice(IndPredVars, m = m)
 IndPredVars.Imp <- list()
@@ -674,13 +685,13 @@ NCAT <- 3
 NCOVCAT <- length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1 + length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1 + length(levels(IndPreds.Inf.X[[1]]$LUSec)) - 1
 
 # get vectors of the variable indices for each categorical variable
-CATIND = c(rep(1, length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1), rep(2, length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1), rep(3, length(levels(IndPreds.Inf.X[[1]]$LUSec)) - 1))
+CATIND <- c(rep(1, length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1), rep(2, length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1), rep(3, length(levels(IndPreds.Inf.X[[1]]$LUSec)) - 1))
 
 # get index of the location where each categorical variable starts
-CATFROM = c(1, 1 + length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1, 1 + length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1 + length(levels(IndPreds.Inf.X[[1]]$LUSec)) - 1)
+CATFROM <- c(1, 1 + length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1, 1 + length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1 + length(levels(IndPreds.Inf.X[[1]]$LUSec)) - 1)
 
 # get index of the location where each categorical variable ends
-CATTO = c(length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1, length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1 + length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1, length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1 + length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1 + length(levels(IndPreds.Inf.X[[1]]$LUSec)) - 1)
+CATTO <- c(length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1, length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1 + length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1, length(levels(IndPreds.Inf.X[[1]]$KMR)) - 1 + length(levels(IndPreds.Inf.X[[1]]$MosType)) - 1 + length(levels(IndPreds.Inf.X[[1]]$LUSec)) - 1)
 
 # set up JAGS data for in-perpetuity covenant
 data.Inf.Sel <- list()
