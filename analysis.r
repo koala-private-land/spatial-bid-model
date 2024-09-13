@@ -2,7 +2,9 @@
 library(tidyverse)
 library(sf)
 library(raster)
-library(rgdal)
+library(terra)
+library(tidyterra)
+library(sf)
 library(runjags)
 library(rjags)
 library(coda)
@@ -1001,6 +1003,21 @@ Compiled_Predictions_10yr <- as_tibble(cbind(Preds_Properties_New, MeanAdopt = P
                                 LowerAdopt = PredictionsX.10yr$Lower, LowerWTA = PredictionsY.10yr$Lower, LowerProp = PredictionsZ.10yr$Lower,
                                 UpperAdopt = PredictionsX.10yr$Upper, UpperWTA = PredictionsY.10yr$Upper, UpperProp = PredictionsZ.10yr$Upper))
 write.csv(Compiled_Predictions_10yr, file = "output/predictions/spatial_predictions_10yr.csv", row.names = FALSE)
+
+# spatialise predictions
+
+# read in predictions if necessary
+Compiled_Predictions_Inf <- read.csv(file = "output/predictions/spatial_predictions_inf.csv") %>% as_tibble() %>% dplyr::select("NewPropID", "KMR", "MeanAdopt", "MeanWTA", "MeanProp", "SDAdopt", "SDWTA", "SDProp", "LowerAdopt", "LowerWTA", "LowerProp", "UpperAdopt", "UpperWTA", "UpperProp")
+Compiled_Predictions_10yr <- read.csv(file = "output/predictions/spatial_predictions_10yr.csv") %>% as_tibble() %>% dplyr::select("NewPropID", "KMR", "MeanAdopt", "MeanWTA", "MeanProp", "SDAdopt", "SDWTA", "SDProp", "LowerAdopt", "LowerWTA", "LowerProp", "UpperAdopt", "UpperWTA", "UpperProp")
+
+# get the spatial layer of the properties
+Props <- st_read("input/properties/properties.gdb", layer = "properties") %>% vect()
+
+# join  predictions to properties and save as a shapefile
+Props_Predictions_Inf <- left_join(Props, Compiled_Predictions_Inf, by = c("NewPropID" = "NewPropID"))
+writeVector(Props_Predictions_Inf, "output/predictions/spatial_predictions_inf.shp")
+Props_Predictions_10yr <- left_join(Props, Compiled_Predictions_10yr, by = c("NewPropID" = "NewPropID"))
+writeVector(Props_Predictions_10yr, "output/predictions/spatial_predictions_10yr.shp")
 
 # EXTRACT COEFFICIENT VALUES AND PLOTS
 

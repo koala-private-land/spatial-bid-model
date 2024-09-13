@@ -1,5 +1,5 @@
 # this model estimates the probability of considering covenant adoption
-# and then given adoption the payment they are willing
+# and then given adoption the payment they are willing to
 # accept for adoption and the proportion of their property they would covenant
 model {
   # likelihood for the probability of considering adoption
