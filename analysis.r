@@ -1006,18 +1006,18 @@ write.csv(Compiled_Predictions_10yr, file = "output/predictions/spatial_predicti
 
 # spatialise predictions
 
-# read in predictions if necessary
-Compiled_Predictions_Inf <- read.csv(file = "output/predictions/spatial_predictions_inf.csv") %>% as_tibble() %>% dplyr::select("NewPropID", "KMR", "MeanAdopt", "MeanWTA", "MeanProp", "SDAdopt", "SDWTA", "SDProp", "LowerAdopt", "LowerWTA", "LowerProp", "UpperAdopt", "UpperWTA", "UpperProp")
-Compiled_Predictions_10yr <- read.csv(file = "output/predictions/spatial_predictions_10yr.csv") %>% as_tibble() %>% dplyr::select("NewPropID", "KMR", "MeanAdopt", "MeanWTA", "MeanProp", "SDAdopt", "SDWTA", "SDProp", "LowerAdopt", "LowerWTA", "LowerProp", "UpperAdopt", "UpperWTA", "UpperProp")
+# read in predictions if necessary, data wrnage, and calcculsate coefficient of variation
+Compiled_Predictions_Inf <- read.csv(file = "output/predictions/spatial_predictions_inf.csv") %>% as_tibble() %>% dplyr::select("NewPropID", "KMR", "MeanAdopt", "MeanWTA", "MeanProp", "SDAdopt", "SDWTA", "SDProp", "LowerAdopt", "LowerWTA", "LowerProp", "UpperAdopt", "UpperWTA", "UpperProp") %>% mutate(CVAdopt = SDAdopt/MeanAdopt, CVWTA = SDWTA/MeanWTA, CVProp = SDProp/MeanProp)
+Compiled_Predictions_10yr <- read.csv(file = "output/predictions/spatial_predictions_10yr.csv") %>% as_tibble() %>% dplyr::select("NewPropID", "KMR", "MeanAdopt", "MeanWTA", "MeanProp", "SDAdopt", "SDWTA", "SDProp", "LowerAdopt", "LowerWTA", "LowerProp", "UpperAdopt", "UpperWTA", "UpperProp") %>% mutate(CVAdopt = SDAdopt/MeanAdopt, CVWTA = SDWTA/MeanWTA, CVProp = SDProp/MeanProp)
 
 # get the spatial layer of the properties
 Props <- st_read("input/properties/properties.gdb", layer = "properties") %>% vect()
 
 # join  predictions to properties and save as a shapefile
 Props_Predictions_Inf <- left_join(Props, Compiled_Predictions_Inf, by = c("NewPropID" = "NewPropID"))
-writeVector(Props_Predictions_Inf, "output/predictions/spatial_predictions_inf.shp")
+writeVector(Props_Predictions_Inf, "output/predictions/spatial_predictions_inf.shp", overwrite=TRUE)
 Props_Predictions_10yr <- left_join(Props, Compiled_Predictions_10yr, by = c("NewPropID" = "NewPropID"))
-writeVector(Props_Predictions_10yr, "output/predictions/spatial_predictions_10yr.shp")
+writeVector(Props_Predictions_10yr, "output/predictions/spatial_predictions_10yr.shp", overwrite=TRUE)
 
 # EXTRACT COEFFICIENT VALUES AND PLOTS
 
