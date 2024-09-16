@@ -672,7 +672,7 @@ for (i in 1:m) {
   ZInd.10yr[[i]] <- model.matrix(~ KMR + MosType + LUSec + LVAL + DOU + COND + ELEV + SLOPE + SCAP, IndPreds.10yr.Z[[i]])
 }
 
-# FITTING MODELS WITH VARIABLE SELECTION
+# FITTING MODELS WITH VARIABLE SELECTION AND FOR POSTERIOR PREDICTIVE CHECKS
 
 # set up JAGS data for in-perpetuity covenant
 
@@ -713,7 +713,7 @@ for(i in 1:m) {
                    NCOV = ncol(XInd.10yr[[i]][, 2:ncol(XInd.10yr[[i]])]), NCOVSA = ncol(XSA1.10yr), CATIND = CATIND, CATFROM = CATFROM, CATTO = CATTO)
 }
 
-# run JAGS models
+# run JAGS models for variable selection
 
 # load functions
 source("functions.r")
@@ -773,6 +773,91 @@ sfStop()
 
 # export models fits to the output folder
 saveRDS(Jags.Fits.Sel.10yr, file = "output/jags/Jags_Fits_Sel_10yr.rds")
+
+# run JAGS models to assess model fit via posterior predictive checks
+
+# load functions
+source("functions.r")
+
+# In-perpetuity covenant model
+
+# parallel processing - comment out if not using parallel processing
+
+# initialise cluster
+sfInit( parallel = TRUE, cpus = 2)
+
+# export data, functions and libraries to workers
+sfExportAll()
+sfClusterEval(library(runjags))
+sfClusterEval(library(coda))
+sfClusterEval(library(rjags))
+sfClusterEval(library(parallel))
+sfClusterEval(library(rjags))
+sfClusterEval(library(modeest))
+
+# run JAGS model
+Jags.Fits.PostCheck.Inf <- sfLapply(data.Inf.Sel, get.jags.postcheck)
+
+# stop cluster
+sfStop()
+
+# non-parallel processing - comment out if using parallel processing
+#Jags.Fits.PostCheck.Inf <- get.jags.postcheck(data.Inf.Sel[[1]])
+
+# export models fits to the output folder
+saveRDS(Jags.Fits.PostCheck.Inf, file = "output/jags/Jags_Fits_PostCheck_Inf.rds")
+
+# 10 year covenant model
+
+# parallel processing - comment out if not using parallel processing
+
+# initialise cluster
+sfInit( parallel = TRUE, cpus = 2)
+
+# export data, functions and libraries to workers
+sfExportAll()
+sfClusterEval(library(runjags))
+sfClusterEval(library(coda))
+sfClusterEval(library(rjags))
+sfClusterEval(library(parallel))
+sfClusterEval(library(rjags))
+sfClusterEval(library(modeest))
+
+# run JAGS model
+Jags.Fits.PostCheck.10yr <- sfLapply(data.10yr.Sel, get.jags.postcheck)
+
+# stop cluster
+sfStop()
+
+# non-parallel processing - comment out if using parallel processing
+#Jags.Fits.PostCheck.10yr <- get.jags.postcheck(data.10yr.Sel[[1]])
+
+# export models fits to the output folder
+saveRDS(Jags.Fits.PostCheck.10yr, file = "output/jags/Jags_Fits_PostCheck_10yr.rds")
+
+# get Bayesian p-values for the posterior predictive checks
+
+# load models if needed
+#Jags.Fits.PostCheck.Inf <- readRDS("output/jags/Jags_Fits_PostCheck_Inf.rds")
+#Jags.Fits.PostCheck.10yr <- readRDS("output/jags/Jags_Fits_PostCheck_10yr.rds")
+
+# integrate mcmc chains
+PostCheckMCMCInf <- do.call("rbind", Jags.Fits.PostCheck.Inf[[1]]$mcmc)
+PostCheckMCMC10yr <- do.call("rbind", Jags.Fits.PostCheck.10yr[[1]]$mcmc)
+for (i in 2:length(Jags.Fits.PostCheck.Inf)) {
+  PostCheckMCMCInf <- rbind(PostCheckMCMCInf, do.call("rbind", Jags.Fits.PostCheck.Inf[[i]]$mcmc))  
+  PostCheckMCMC10yr <- rbind(PostCheckMCMC10yr, do.call("rbind", Jags.Fits.PostCheck.10yr[[i]]$mcmc))
+}
+PostCheckMCMCInf <- as_tibble(PostCheckMCMCInf)
+PostCheckMCMC10yr <- as_tibble(PostCheckMCMC10yr)
+
+# calulate p-values for the probability that the fit to the observed data is worse than the fit to the simulated data
+p_accept_inf <- length(which(PostCheckMCMCInf$fit_accept_test < 0)) / length(PostCheckMCMCInf$fit_accept_test)
+p_wta_inf <- length(which(PostCheckMCMCInf$fit_wta_test < 0)) / length(PostCheckMCMCInf$fit_wta_test)
+p_prop_inf <- length(which(PostCheckMCMCInf$fit_prop_test < 0)) / length(PostCheckMCMCInf$fit_prop_test)
+p_accept_10yr <- length(which(PostCheckMCMC10yr$fit_accept_test < 0)) / length(PostCheckMCMC10yr$fit_accept_test)
+p_wta_10yr <- length(which(PostCheckMCMC10yr$fit_wta_test < 0)) / length(PostCheckMCMC10yr$fit_wta_test)
+p_prop_10yr <- length(which(PostCheckMCMC10yr$fit_prop_test < 0)) / length(PostCheckMCMC10yr$fit_prop_test)
 
 # PREDICTIONS
 

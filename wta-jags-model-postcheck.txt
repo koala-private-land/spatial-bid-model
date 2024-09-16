@@ -1,0 +1,181 @@
+# this model estimates the probability of considering covenant adoption
+# and then given adoption the payment they are willing to
+# accept for adoption and the proportion of their property they would covenant
+model {
+  # likelihood for the probability of considering adoption
+  # loop through all survey participants
+  for (i in 1:N) {
+    ACCEPT[i] ~ dbern(px[i])
+    logit(px[i]) <- sum(X[i,] * beta_x) + xsa1[SAIDx[i]]
+
+    # goodness-of-fit
+    # compute discrepancy statistics for observed data
+    # Pearson residuals
+    ACCEPT_res_obs[i] <- (ACCEPT[i] - px[i]) / sqrt(px[i] * (1 - px[i]))
+    # compute discrepancy statistics for simulated data
+    # Pearson residuals
+    ACCEPT_sim[i] ~ dbern(px[i])
+    ACCEPT_res_sim[i] <- (ACCEPT_sim[i] - px[i]) / sqrt(px[i] * (1 - px[i]))
+  }
+  # loop through SA1s
+  for (i in 1:NSA) {
+    xsa1[i] <- sum(XSA[i,] * betasa_x)
+  }
+  
+  # likelihood for willingness to accept values
+  # loop through all survey participants who are willing to consider adoption
+  for (i in 1:M) {
+    CENS[i] ~ dinterval(WTA[i], LIM)
+    WTA[i] ~ dnorm(muy[i], tau)
+    muy[i] <- sum(Y[i,] * beta_y) + ysa1[SAIDy[i]]
+
+    # goodness-of-fit
+    # compute discrepancy statistics for observed data
+    # Pearson residuals
+    WTA_res_obs[i] <- (WTA[i] - muy[i]) / (1 / sqrt(tau))
+    # compute discrepancy statistics for simulated data
+    # Pearson residuals
+    CENS_sim[i] ~ dinterval(WTA_sim[i], LIM)
+    WTA_sim[i] ~ dnorm(muy[i], tau)
+    WTA_res_sim[i] <- (WTA_sim[i] - muy[i]) / (1 / sqrt(tau))
+  }
+  # loop through SA1s
+  for (i in 1:MSA) {
+    ysa1[i] <- sum(YSA[i,] * betasa_y)
+  }
+  
+  # likelihood for the proportion of property to apply covenant
+  # loop through all survey participants who are willing to consider adoption
+  for (i in 1:O) {
+    # parameters for beta distribution
+    # mean: mu = a / (a + b)
+    # precision: phi = a + b
+    # hence: a = mu * phi and b = (1 - mu) * phi
+    # expectation depends on predictor variables, precision assumed constant
+    PROP[i] ~ dbeta(a[i], b[i])
+    a[i] <- muz[i] * phi
+  	b[i] <- (1 - muz[i]) * phi
+    logit(muz[i]) <- sum(Z[i,] * beta_z) + zsa1[SAIDz[i]]
+
+    # goodness-of-fit
+    # compute discrepancy statistics for observed data
+    # Pearson residuals
+    PROP_res_obs[i] <- (PROP[i] - (a[i] / (a[i] + b[i]))) / (1 / sqrt(a[i] + b[i]))
+    # compute discrepancy statistics for simulated data
+    # Pearson residuals
+    PROP_sim[i] ~ dbeta(a[i], b[i])
+    PROP_res_sim[i] <- (PROP_sim[i] - (a[i] / (a[i] + b[i]))) / (1 / sqrt(a[i] + b[i]))
+  }
+  # loop through SA1s
+  for (i in 1:OSA) {
+    zsa1[i] <- sum(ZSA[i,] * betasa_z)
+  }
+
+  # calculate metrics for posterior predictive checks 
+  fit_accept_test <- sum(ACCEPT_res_obs[]) - sum(ACCEPT_res_sim[])
+  fit_wta_test <- sum(WTA_res_obs[]) - sum(WTA_res_sim[])
+  fit_prop_test <- sum(PROP_res_obs[]) - sum(PROP_res_sim[])  
+
+  # Priors
+  # uses the approach of Ray-Bing Chen, Chi-Hsiang Chu, Shinsheng Yuan & Ying Nian Wu (2016)
+  # Bayesian Sparse Group Selection, Journal of Computational and Graphical Statistics, 25:3,
+  # 665-683 for setting priors for variable selection
+
+  # priors for variable inclusion
+  p_g <- 0.5
+  p_gl <- 0.5
+
+  # property level
+
+  # variance components
+  tau <- sig^-2
+  sig ~ dlnorm(0, 0.001)
+  phi ~ dlnorm(0, 0.001)
+
+  # coefficients
+
+  # variable inclusion
+  # fixed at 1 so that we get the saturated model
+  for (i in 1:NCAT) {
+    eta_g_x[i] <- 1
+    eta_g_y[i] <- 1
+    eta_g_z[i] <- 1
+  }
+
+  for (i in 1:NCAT) {
+    for (j in CATFROM[i]:CATTO[i]) {
+      # X model
+      # fixed at 1 so that we get the saturated model
+      gamma_gl_x[j] <- 1
+      gammac_gl_x[j] <- (1 - eta_g_x[CATIND[j]]) * 0 + (eta_g_x[CATIND[j]] * gamma_gl_x[j])
+      b_x[j] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+      beta_x[j] <- (1 - (eta_g_x[CATIND[j]] * gammac_gl_x[j])) * 0 + (eta_g_x[CATIND[j]] * gammac_gl_x[j] * b_x[j])
+      # Y model
+      # fixed at 1 so that we get the saturated model
+      gamma_gl_y[j] <- 1
+      gammac_gl_y[j] <- (1 - eta_g_y[CATIND[j]]) * 0 + (eta_g_y[CATIND[j]] * gamma_gl_y[j])
+      b_y[j] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+      beta_y[j] <- (1 - (eta_g_y[CATIND[j]] * gammac_gl_y[j])) * 0 + (eta_g_y[CATIND[j]] * gammac_gl_y[j] * b_y[j])
+      # Z model
+      # fixed at 1 so that we get the saturated model
+      gamma_gl_z[j] <- 1
+      gammac_gl_z[j] <- (1 - eta_g_z[CATIND[j]]) * 0 + (eta_g_z[CATIND[j]] * gamma_gl_z[j])
+      b_z[j] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+      beta_z[j] <- (1 - (eta_g_z[CATIND[j]] * gammac_gl_z[j])) * 0 + (eta_g_z[CATIND[j]] * gammac_gl_z[j] * b_z[j])
+    }
+  }
+
+  # continuous variables
+  for (i in (NCOVCAT + 1):NCOV) {
+    # X model
+    # fixed at 1 so that we get the saturated model
+    gamma_gl_x[i] <- 1
+    b_x[i] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+    beta_x[i] <- (1 - gamma_gl_x[i]) * 0 + (gamma_gl_x[i] * b_x[i])
+    # Y model
+    # fixed at 1 so that we get the saturated model
+    gamma_gl_y[i] <- 1
+    b_y[i] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+    beta_y[i] <- (1 - gamma_gl_y[i]) * 0 + (gamma_gl_y[i] * b_y[i])
+    # Z model
+    # fixed at 1 so that we get the saturated model
+    gamma_gl_z[i] <- 1
+    b_z[i] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+    beta_z[i] <- (1 - gamma_gl_z[i]) * 0 + (gamma_gl_z[i] * b_z[i])
+  }
+
+  # SA1 level
+
+  # coefficients - currently assumes only continuous variables at the SA1 level
+
+  # X model
+  gammasa_gl_x[1] <- 1
+  bsa_x[1] ~ dnorm(0, 0.1)
+  betasa_x[1] <- bsa_x[1]
+  # Y model
+  gammasa_gl_y[1] <- 1
+  bsa_y[1] ~ dnorm(0, 0.1)
+  betasa_y[1] <- bsa_y[1]
+  # Z model
+  gammasa_gl_z[1] <- 1
+  bsa_z[1] ~ dnorm(0, 0.1)
+  betasa_z[1] <- bsa_z[1]
+  # loop through predictors
+  for (i in 2:NCOVSA) {
+    # X model
+    # fixed at 1 so that we get the saturated model
+    gammasa_gl_x[i] <- 1
+    bsa_x[i] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+    betasa_x[i] <- (1 - gammasa_gl_x[i]) * 0 + (gammasa_gl_x[i] * bsa_x[i])
+    # Y model
+    # fixed at 1 so that we get the saturated model
+    gammasa_gl_y[i] <- 1
+    bsa_y[i] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+    betasa_y[i] <- (1 - gammasa_gl_y[i]) * 0 + (gammasa_gl_y[i] * bsa_y[i])
+    # Z model
+    # fixed at 1 so that we get the saturated model
+    gammasa_gl_z[i] <- 1
+    bsa_z[i] ~ dnorm(0, 1) # tau fixed but could tune using cross-validation or set inverse-gamma hyperparameter (see Chen et al. 2016)
+    betasa_z[i] <- (1 - gammasa_gl_z[i]) * 0 + (gammasa_gl_z[i] * bsa_z[i])
+  }
+}
