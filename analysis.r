@@ -516,6 +516,8 @@ for (i in 1:m) {
 
 # format required data for the JAGS model
 
+# note here we reomove PGRASS as native grasses occur on very few propoerties
+
 # probability landholder would consider covenant model (X)
 ACCEPT.Inf.X <- ACCEPT.Inf[which(!is.na(ACCEPT.Inf))]
 ACCEPT.10yr.X <- ACCEPT.10yr[which(!is.na(ACCEPT.10yr))]
@@ -865,8 +867,8 @@ p_prop_10yr <- length(which(PostCheckMCMC10yr$fit_prop_test < 0)) / length(PostC
 source("functions.r")
 
 # load models if needed
-#Jags.Fits.Sel.Inf <- readRDS("output/jags/Jags_Fits_Sel_Inf.rds")
-#Jags.Fits.Sel.10yr <- readRDS("output/jags/Jags_Fits_Sel_10yr.rds")
+Jags.Fits.Sel.Inf <- readRDS("output/jags/Jags_Fits_Sel_Inf.rds")
+Jags.Fits.Sel.10yr <- readRDS("output/jags/Jags_Fits_Sel_10yr.rds")
 
 # get the properties data to make predictions and remove the following land uses:
 # 1.1.0 Nature conservation
@@ -1104,14 +1106,14 @@ writeVector(Props_Predictions_Inf, "output/predictions/spatial_predictions_inf.s
 Props_Predictions_10yr <- left_join(Props, Compiled_Predictions_10yr, by = c("NewPropID" = "NewPropID"))
 writeVector(Props_Predictions_10yr, "output/predictions/spatial_predictions_10yr.shp", overwrite=TRUE)
 
-# EXTRACT COEFFICIENT VALUES AND PLOTS
+# EXTRACT COEFFICIENT VALUES
 
 # load functions
 source("functions.r")
 
 # load models if needed
-#Jags.Fits.Sel.Inf <- readRDS("output/jags/Jags_Fits_Sel_Inf.rds")
-#Jags.Fits.Sel.10yr <- readRDS("output/jags/Jags_Fits_Sel_10yr.rds")
+Jags.Fits.Sel.Inf <- readRDS("output/jags/Jags_Fits_Sel_Inf.rds")
+Jags.Fits.Sel.10yr <- readRDS("output/jags/Jags_Fits_Sel_10yr.rds")
 
 # set the number of samples to draw from the full MCMC chains for each imputed data set
 NumSamples <- 10000
@@ -1125,11 +1127,10 @@ ParamsX.10yr <- list()
 ParamsY.10yr <- list()
 ParamsZ.10yr <- list()
 
+# In-perpetuity model
+
 # loop through each data imputation replicate and get parameter draws
 for (i in 1:m) {
-
-  # In-perpetuity model
-
   # get expected coefficient values
   SummaryVals <- summary(Jags.Fits.Sel.Inf[[i]])
   ParamIDsX <- c(which(dimnames(SummaryVals)[[1]] == "betasa_x[1]"), which(dimnames(SummaryVals)[[1]] == "beta_x[1]"):which(dimnames(SummaryVals)[[1]] == "beta_x[20]"),
@@ -1175,3 +1176,93 @@ ParamsY.Inf.Exp <- as.matrix(colMeans(ParamsY.Inf))
 dimnames(ParamsY.Inf.Exp)[[2]] <- "Mean"
 ParamsZ.Inf.Exp <- as.matrix(colMeans(ParamsZ.Inf))
 dimnames(ParamsZ.Inf.Exp)[[2]] <- "Mean"
+
+# get the lower 95% credible interval
+ParamsX.Inf.Lower <- as.matrix(apply(ParamsX.Inf, 2, quantile, probs = 0.025))
+ParamsY.Inf.Lower <- as.matrix(apply(ParamsY.Inf, 2, quantile, probs = 0.025))
+ParamsZ.Inf.Lower <- as.matrix(apply(ParamsZ.Inf, 2, quantile, probs = 0.025))
+
+# get the upper 95% credible interval
+ParamsX.Inf.Upper <- as.matrix(apply(ParamsX.Inf, 2, quantile, probs = 0.975))
+ParamsY.Inf.Upper <- as.matrix(apply(ParamsY.Inf, 2, quantile, probs = 0.975))
+ParamsZ.Inf.Upper <- as.matrix(apply(ParamsZ.Inf, 2, quantile, probs = 0.975))
+
+# combine into single tibbles
+ParamsX.Inf.All <- tibble(Parameter = names(ParamsX.Inf), Expected = round(ParamsX.Inf.Exp[, 1], 3), Lower = round(ParamsX.Inf.Lower[, 1], 3), Upper = round(ParamsX.Inf.Upper[, 1], 3))
+ParamsY.Inf.All <- tibble(Parameter = names(ParamsY.Inf), Expected = round(ParamsY.Inf.Exp[, 1], 3), Lower = round(ParamsY.Inf.Lower[, 1], 3), Upper = round(ParamsY.Inf.Upper[, 1], 3))
+ParamsZ.Inf.All <- tibble(Parameter = names(ParamsZ.Inf), Expected = round(ParamsZ.Inf.Exp[, 1], 3), Lower = round(ParamsZ.Inf.Lower[, 1], 3), Upper = round(ParamsZ.Inf.Upper[, 1], 3))
+
+# save tables
+write_csv(ParamsX.Inf.All, "output/parameter_estimates/params_covprob_inf.csv")
+write_csv(ParamsY.Inf.All, "output/parameter_estimates/params_wta_inf.csv")
+write_csv(ParamsZ.Inf.All, "output/parameter_estimates/params_prop_inf.csv")
+
+# 10 year model
+
+# loop through each data imputation replicate and get parameter draws
+for (i in 1:m) {
+  # get expected coefficient values
+  SummaryVals <- summary(Jags.Fits.Sel.10yr[[i]])
+  ParamIDsX <- c(which(dimnames(SummaryVals)[[1]] == "betasa_x[1]"), which(dimnames(SummaryVals)[[1]] == "beta_x[1]"):which(dimnames(SummaryVals)[[1]] == "beta_x[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "betasa_x[2]"):which(dimnames(SummaryVals)[[1]] == "betasa_x[6]"),
+                  which(dimnames(SummaryVals)[[1]] == "eta_g_x[1]"):which(dimnames(SummaryVals)[[1]] == "eta_g_x[3]"),
+                  which(dimnames(SummaryVals)[[1]] == "gamma_gl_x[15]"):which(dimnames(SummaryVals)[[1]] == "gamma_gl_x[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "gammasa_gl_x[2]"):which(dimnames(SummaryVals)[[1]] == "gammasa_gl_x[6]"))
+  ParamIDsY <- c(which(dimnames(SummaryVals)[[1]] == "betasa_y[1]"), which(dimnames(SummaryVals)[[1]] == "beta_y[1]"):which(dimnames(SummaryVals)[[1]] == "beta_y[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "betasa_y[2]"):which(dimnames(SummaryVals)[[1]] == "betasa_y[6]"),
+                  which(dimnames(SummaryVals)[[1]] == "eta_g_y[1]"):which(dimnames(SummaryVals)[[1]] == "eta_g_y[3]"),
+                  which(dimnames(SummaryVals)[[1]] == "gamma_gl_y[15]"):which(dimnames(SummaryVals)[[1]] == "gamma_gl_y[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "gammasa_gl_y[2]"):which(dimnames(SummaryVals)[[1]] == "gammasa_gl_y[6]"))
+  ParamIDsZ <- c(which(dimnames(SummaryVals)[[1]] == "betasa_z[1]"), which(dimnames(SummaryVals)[[1]] == "beta_z[1]"):which(dimnames(SummaryVals)[[1]] == "beta_z[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "betasa_z[2]"):which(dimnames(SummaryVals)[[1]] == "betasa_z[6]"),
+                  which(dimnames(SummaryVals)[[1]] == "eta_g_z[1]"):which(dimnames(SummaryVals)[[1]] == "eta_g_z[3]"),
+                  which(dimnames(SummaryVals)[[1]] == "gamma_gl_z[15]"):which(dimnames(SummaryVals)[[1]] == "gamma_gl_z[20]"),
+                  which(dimnames(SummaryVals)[[1]] == "gammasa_gl_z[2]"):which(dimnames(SummaryVals)[[1]] == "gammasa_gl_z[6]"))
+
+  # get coefficient values for individual MCMC draws
+  MCMC_Draws <- as_tibble(as.mcmc(Jags.Fits.Sel.10yr[[i]]))
+  ParamsX.10yr[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), ParamIDsX]
+  ParamsY.10yr[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), ParamIDsY]
+  ParamsZ.10yr[[i]] <- MCMC_Draws[sample(nrow(MCMC_Draws), NumSamples), ParamIDsZ]
+}
+
+# combine lists into a single tibble
+ParamsX.10yr <- map_dfr(ParamsX.10yr, bind_rows)
+ParamsY.10yr <- map_dfr(ParamsY.10yr, bind_rows)
+ParamsZ.10yr <- map_dfr(ParamsZ.10yr, bind_rows)
+
+# create meaningful column names
+names(ParamsX.10yr) <- c(paste(dimnames(Model_MatrixX.10yr[[1]])[[2]], "PARAM", sep="_"), "KMR_SELF", "MosType_SELF", "LUSec_SELF",
+                        paste(dimnames(Model_MatrixX.10yr[[1]])[[2]][16:26], "SELF", sep="_"))
+names(ParamsY.10yr) <- c(paste(dimnames(Model_MatrixY.10yr[[1]])[[2]], "PARAM", sep="_"), "KMR_SELF", "MosType_SELF", "LUSec_SELF",
+                        paste(dimnames(Model_MatrixY.10yr[[1]])[[2]][16:26], "SELF", sep="_"))
+names(ParamsZ.10yr) <- c(paste(dimnames(Model_MatrixZ.10yr[[1]])[[2]], "PARAM", sep="_"), "KMR_SELF", "MosType_SELF", "LUSec_SELF",
+                        paste(dimnames(Model_MatrixZ.10yr[[1]])[[2]][16:26], "SELF", sep="_"))
+
+# get expected values
+ParamsX.10yr.Exp <- as.matrix(colMeans(ParamsX.10yr))
+dimnames(ParamsX.10yr.Exp)[[2]] <- "Mean"
+ParamsY.10yr.Exp <- as.matrix(colMeans(ParamsY.10yr))
+dimnames(ParamsY.10yr.Exp)[[2]] <- "Mean"
+ParamsZ.10yr.Exp <- as.matrix(colMeans(ParamsZ.10yr))
+dimnames(ParamsZ.10yr.Exp)[[2]] <- "Mean"
+
+# get the lower 95% credible interval
+ParamsX.10yr.Lower <- as.matrix(apply(ParamsX.10yr, 2, quantile, probs = 0.025))
+ParamsY.10yr.Lower <- as.matrix(apply(ParamsY.10yr, 2, quantile, probs = 0.025))
+ParamsZ.10yr.Lower <- as.matrix(apply(ParamsZ.10yr, 2, quantile, probs = 0.025))
+
+# get the upper 95% credible interval
+ParamsX.10yr.Upper <- as.matrix(apply(ParamsX.10yr, 2, quantile, probs = 0.975))
+ParamsY.10yr.Upper <- as.matrix(apply(ParamsY.10yr, 2, quantile, probs = 0.975))
+ParamsZ.10yr.Upper <- as.matrix(apply(ParamsZ.10yr, 2, quantile, probs = 0.975))
+
+# combine into single tibbles
+ParamsX.10yr.All <- tibble(Parameter = names(ParamsX.10yr), Expected = round(ParamsX.10yr.Exp[, 1], 3), Lower = round(ParamsX.10yr.Lower[, 1], 3), Upper = round(ParamsX.10yr.Upper[, 1], 3))
+ParamsY.10yr.All <- tibble(Parameter = names(ParamsY.10yr), Expected = round(ParamsY.10yr.Exp[, 1], 3), Lower = round(ParamsY.10yr.Lower[, 1], 3), Upper = round(ParamsY.10yr.Upper[, 1], 3))
+ParamsZ.10yr.All <- tibble(Parameter = names(ParamsZ.10yr), Expected = round(ParamsZ.10yr.Exp[, 1], 3), Lower = round(ParamsZ.10yr.Lower[, 1], 3), Upper = round(ParamsZ.10yr.Upper[, 1], 3))
+
+# save tables
+write_csv(ParamsX.10yr.All, "output/parameter_estimates/params_covprob_10yr.csv")
+write_csv(ParamsY.10yr.All, "output/parameter_estimates/params_wta_10yr.csv")
+write_csv(ParamsZ.10yr.All, "output/parameter_estimates/params_prop_10yr.csv")
