@@ -601,7 +601,7 @@ TestCorData <- IndPredVars %>% mutate(AREA = scale(log(AREA)), LVAL = scale(log(
                   SLOPE = scale(SLOPE), TRI = scale(log(TRI)), SCAP = scale(as.numeric(SCAP)))
 
 # check collinearity among continuous variables - considering removing one of the variables for pairs of variables with correlation coefficients > 0.6
-# outcomes: removed AREA kept LVAL, removed DMU kept LVAL, removed PTREE kept COND, removed CONN kept COND, removed TRI kelt SLOPE
+# outcomes: removed AREA kept LVAL, removed DMU kept LVAL, removed PTREE kept COND, removed CONN kept COND, removed TRI kept SLOPE
 # did not test against census PCs as these operate at a different resolution to the property and so wanted to keep those
 Corr_Cont <- cor(TestCorData %>% dplyr::select(-KMR, -MosType, -LUSec), use = "complete.obs")
 write.csv(Corr_Cont, file="output/collinearity/cor_cont.csv")
