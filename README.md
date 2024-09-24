@@ -1,4 +1,4 @@
-# Landholder Rreference Model
+# Landholder Preference Model
 
 This repository contains the R code for the landholder preference models used in the paper "Optimal investments in private land conservation depend more on landholder preferences than climate change" 
 
