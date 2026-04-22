@@ -22,7 +22,7 @@ getScriptPath <- function() {
   fileArgument <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 
   if (length(fileArgument) == 0) {
-    return(file.path(getwd(), "code", "buildTenderDatabase.R"))
+    return(file.path(getwd(), "code", "buildTenderBidDatabase.R"))
   }
 
   normalizePath(
@@ -56,6 +56,30 @@ cleanCampaignName <- function(campaignName) {
     str_squish()
 }
 
+classifyAgreementType <- function(campaignName, mechanismName) {
+  cleanCampaign <- campaignName %>%
+    coalesce("") %>%
+    str_to_lower() %>%
+    str_squish()
+
+  cleanMechanism <- mechanismName %>%
+    coalesce("") %>%
+    str_to_lower() %>%
+    str_squish()
+
+  case_when(
+    str_detect(cleanCampaign, "biodiversity offsets program") ~ "exclude",
+    str_detect(cleanCampaign, "revolving fund") ~ "exclude",
+    str_detect(cleanCampaign, "wildlife refuge") ~ "exclude",
+    str_detect(cleanCampaign, "fixed price offer") ~ "fixed",
+    str_detect(cleanCampaign, "conservation tender") ~ "tender",
+    cleanMechanism %in% c("ct", "conservation tender") ~ "tender",
+    str_detect(cleanCampaign, "unfunded") ~ "unfunded",
+    str_detect(cleanCampaign, "koala strategy") ~ "unfunded",
+    TRUE ~ NA_character_
+  )
+}
+
 matchCovenantCampaign <- function(covenantCampaigns, tenderCampaigns) {
   tenderLookup <- tenderCampaigns %>%
     st_drop_geometry() %>%
@@ -86,9 +110,9 @@ matchCovenantCampaign <- function(covenantCampaigns, tenderCampaigns) {
         str_detect(cleanCovenantName, "plains wanderer") ~ "plains wanderer",
         str_detect(cleanCovenantName, "northern inland floodplain") ~ "northern inland floodplains",
         str_detect(cleanCovenantName, "snowgum.*north") ~ "snow gum grassy woodland and grasslands north",
-        str_detect(cleanCovenantName, "snow gum.*north") ~ "snow gum grassy woodland and grasslands north",
+        str_detect(cleanCovenantName, "snowgum.*north") ~ "snow gum grassy woodland and grasslands north",
         str_detect(cleanCovenantName, "snowgum.*south") ~ "snow gum grassy woodland and grasslands south",
-        str_detect(cleanCovenantName, "snow gum.*south") ~ "snow gum grassy woodland and grasslands south",
+        str_detect(cleanCovenantName, "snowgum.*south") ~ "snow gum grassy woodland and grasslands south",
         str_detect(cleanCovenantName, "lower clarence valley") ~ "lower clarence valley",
         str_detect(cleanCovenantName, "paroo warrego") ~ "paroo warrego catchments",
         str_detect(cleanCovenantName, "northern inland koala") ~ "northern inland koala",
@@ -126,7 +150,7 @@ writeLayer <- function(spatialData, outputPath, layerName) {
 scriptPath <- getScriptPath()
 projectPath <- normalizePath(file.path(dirname(scriptPath), ".."), winslash = "/")
 inputPath <- file.path(projectPath, "inputs")
-outputPath <- file.path(projectPath, "outputs", "tenderDatabase.gpkg")
+outputPath <- file.path(projectPath, "outputs", "tenderBidDatabase.gpkg")
 
 if (file.exists(outputPath)) {
   stop(
@@ -163,8 +187,8 @@ covenantPath <- file.path(
   "BCT_agreements_110325.shp"
 )
 
-message("Reading tender campaigns")
-tenderCampaigns <- st_read(tenderBoundaryPath, quiet = TRUE) %>%
+message("Reading tender-bid campaigns")
+tenderBidCampaigns <- st_read(tenderBoundaryPath, quiet = TRUE) %>%
   standardiseGeometryName() %>%
   filter(mechanism == "CT") %>%
   transmute(
@@ -193,21 +217,21 @@ properties <- st_read(propertyPath, layer = propertyLayer, quiet = TRUE) %>%
     geometry = geometry
   )
 
-message("Building tender available properties")
-tenderCampaignsProjected <- tenderCampaigns %>%
+message("Building tender-bid available properties")
+tenderBidCampaignsProjected <- tenderBidCampaigns %>%
   st_transform(st_crs(properties)) %>%
   st_make_valid()
 
-propertiesForTender <- properties %>%
+propertiesForTenderBid <- properties %>%
   filter(conservationAvailability == "Available for Conservation Agreements") %>%
   st_make_valid()
 
-tenderAvailableProperties <- propertiesForTender %>%
-  st_filter(tenderCampaignsProjected) %>%
-  st_intersection(tenderCampaignsProjected) %>%
+tenderBidAvailableProperties <- propertiesForTenderBid %>%
+  st_filter(tenderBidCampaignsProjected) %>%
+  st_intersection(tenderBidCampaignsProjected) %>%
   mutate(
     overlapAreaHa = as.numeric(st_area(geometry)) / 10000,
-    eligibleForTender = TRUE
+    eligibleForTenderBid = TRUE
   ) %>%
   transmute(
     tendID,
@@ -217,7 +241,7 @@ tenderAvailableProperties <- propertiesForTender %>%
     campaignName,
     availableAreaHa,
     overlapAreaHa,
-    eligibleForTender,
+    eligibleForTenderBid,
     geometry = geometry
   )
 
@@ -226,29 +250,35 @@ tenderAvailableProperties <- propertiesForTender %>%
 # - Filter or flag records by minimum hectares, region rules, and other criteria.
 # - Keep the final field names unchanged.
 
-message("Reading and matching tender covenants")
+message("Reading and matching tender-bid covenants")
 covenantCampaignMatches <- st_read(covenantPath, quiet = TRUE) %>%
+  mutate(
+    agreementType = classifyAgreementType(campaign, mechanism)
+  ) %>%
   filter(
     program == "CMP",
     funded == "Yes",
-    mechanism == "ct"
+    agreementType == "tender"
   ) %>%
   st_drop_geometry() %>%
   pull(campaign) %>%
-  matchCovenantCampaign(tenderCampaigns)
+  matchCovenantCampaign(tenderBidCampaigns)
 
-tenderCovenantsRaw <- st_read(covenantPath, quiet = TRUE) %>%
+tenderBidCovenantsRaw <- st_read(covenantPath, quiet = TRUE) %>%
   standardiseGeometryName() %>%
+  mutate(
+    agreementType = classifyAgreementType(campaign, mechanism)
+  ) %>%
   filter(
     program == "CMP",
     funded == "Yes",
-    mechanism == "ct"
+    agreementType == "tender"
   ) %>%
   left_join(covenantCampaignMatches, by = "campaign") %>%
   st_transform(st_crs(properties)) %>%
   st_make_valid()
 
-covenantPropertyMatches <- tenderCovenantsRaw %>%
+covenantPropertyMatches <- tenderBidCovenantsRaw %>%
   st_join(
     properties %>%
       select(PropID) %>%
@@ -258,8 +288,8 @@ covenantPropertyMatches <- tenderCovenantsRaw %>%
     largest = TRUE
   )
 
-tenderCovenants <- covenantPropertyMatches %>%
-  st_transform(st_crs(tenderCampaigns)) %>%
+tenderBidCovenants <- covenantPropertyMatches %>%
+  st_transform(st_crs(tenderBidCampaigns)) %>%
   transmute(
     tendID,
     PropID,
@@ -276,18 +306,18 @@ tenderCovenants <- covenantPropertyMatches %>%
   )
 
 message("Writing GeoPackage")
-writeLayer(tenderCampaigns, outputPath, "tenderCampaigns")
+writeLayer(tenderBidCampaigns, outputPath, "tenderBidCampaigns")
 writeLayer(properties, outputPath, "properties")
-writeLayer(tenderAvailableProperties, outputPath, "tenderAvailableProperties")
-writeLayer(tenderCovenants, outputPath, "tenderCovenants")
+writeLayer(tenderBidAvailableProperties, outputPath, "tenderBidAvailableProperties")
+writeLayer(tenderBidCovenants, outputPath, "tenderBidCovenants")
 
 message("Validating output")
 outputLayers <- st_layers(outputPath)$name
 expectedLayers <- c(
-  "tenderCampaigns",
+  "tenderBidCampaigns",
   "properties",
-  "tenderAvailableProperties",
-  "tenderCovenants"
+  "tenderBidAvailableProperties",
+  "tenderBidCovenants"
 )
 
 missingLayers <- setdiff(expectedLayers, outputLayers)
@@ -296,31 +326,31 @@ if (length(missingLayers) > 0) {
   stop("Missing output layers: ", paste(missingLayers, collapse = ", "))
 }
 
-unmatchedCampaignCount <- tenderCovenants %>%
+unmatchedCampaignCount <- tenderBidCovenants %>%
   st_drop_geometry() %>%
   filter(is.na(tendID)) %>%
   nrow()
 
-unmatchedPropertyCount <- tenderCovenants %>%
+unmatchedPropertyCount <- tenderBidCovenants %>%
   st_drop_geometry() %>%
   filter(is.na(PropID)) %>%
   nrow()
 
-if (any(is.na(tenderAvailableProperties$tendID))) {
-  stop("Missing tendID values in tenderAvailableProperties")
+if (any(is.na(tenderBidAvailableProperties$tendID))) {
+  stop("Missing tendID values in tenderBidAvailableProperties")
 }
 
-if (any(is.na(tenderAvailableProperties$PropID))) {
-  stop("Missing PropID values in tenderAvailableProperties")
+if (any(is.na(tenderBidAvailableProperties$PropID))) {
+  stop("Missing PropID values in tenderBidAvailableProperties")
 }
 
 message("")
-message("Tender database V1 complete")
+message("Tender-bid database V1 complete")
 message("Output: ", outputPath)
 message("Rows:")
-message("  tenderCampaigns: ", nrow(tenderCampaigns))
+message("  tenderBidCampaigns: ", nrow(tenderBidCampaigns))
 message("  properties: ", nrow(properties))
-message("  tenderAvailableProperties: ", nrow(tenderAvailableProperties))
-message("  tenderCovenants: ", nrow(tenderCovenants))
-message("Unmatched tender covenant campaigns: ", unmatchedCampaignCount)
-message("Unmatched tender covenant properties: ", unmatchedPropertyCount)
+message("  tenderBidAvailableProperties: ", nrow(tenderBidAvailableProperties))
+message("  tenderBidCovenants: ", nrow(tenderBidCovenants))
+message("Unmatched tender-bid covenant campaigns: ", unmatchedCampaignCount)
+message("Unmatched tender-bid covenant properties: ", unmatchedPropertyCount)
