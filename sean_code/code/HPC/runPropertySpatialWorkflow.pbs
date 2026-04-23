@@ -10,18 +10,17 @@ set -euo pipefail
 
 SUBMIT_ROOT="${PBS_O_WORKDIR:-$(pwd)}"
 WORKFLOW_ROOT="${WORKFLOW_ROOT:-${SUBMIT_ROOT}}"
-PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${WORKFLOW_ROOT}/../.." && pwd)}"
+PROJECT_ROOT="${PROJECT_ROOT:-${WORKFLOW_ROOT}}"
 HOME_HPC_ROOT="${HOME_HPC_ROOT:-${PROJECT_ROOT}}"
 SCRATCH_BASE="${SCRATCH_BASE:-/scratch/n12135241_hpc}"
 RUN_ROOT="${SCRATCH_BASE}/run_${PBS_JOBID:-manual}/$(basename "${PROJECT_ROOT}")"
 
 mkdir -p "${SCRATCH_BASE}"
 mkdir -p "$(dirname "${RUN_ROOT}")"
-rsync -a --delete "${PROJECT_ROOT}/" "${RUN_ROOT}/"
+rsync -a --delete "${WORKFLOW_ROOT}/" "${RUN_ROOT}/"
 cd "${RUN_ROOT}"
 
-WORKFLOW_RELATIVE_PATH="${WORKFLOW_RELATIVE_PATH:-code/HPC}"
-MANIFEST_PATH="${RUN_ROOT}/${WORKFLOW_RELATIVE_PATH}/input/propertySpatialStagePaths.txt"
+MANIFEST_PATH="${RUN_ROOT}/input/propertySpatialStagePaths.txt"
 STAGE_ROOT="${RUN_ROOT}/property_spatial_stage"
 INPUT_ROOT="${STAGE_ROOT}/inputs"
 OUTPUT_ROOT="${STAGE_ROOT}/outputs"
@@ -137,7 +136,7 @@ echo "Adjacency workers: ${ADJ_WORKERS}"
   export PROPERTY_ADJ_CONSTANTS_OUTPUT_PATH="${OUTPUT_ROOT}/propertyAdjacencyConstants.rds"
   export PROPERTY_ADJ_WORKERS="${ADJ_WORKERS}"
 
-  "${RSCRIPT_BIN}" "${STAGE_ROOT}/code/buildPropertyAdjacency.R"
+  "${RSCRIPT_BIN}" "${STAGE_ROOT}/buildPropertyAdjacency.R"
 ) > "${LOG_ROOT}/propertyAdjacency.log" 2>&1 &
 ADJ_PID=$!
 
@@ -150,7 +149,7 @@ for shard_index in $(seq 1 "${GRID_SHARD_COUNT}"); do
     export PROPERTY_GRID_SHARD_INDEX="${shard_index}"
     export PROPERTY_GRID_OUTPUT_PATH="${GRID_SHARD_ROOT}/propertyGridShard_$(printf '%03d' "${shard_index}").gpkg"
 
-    "${RSCRIPT_BIN}" "${STAGE_ROOT}/code/buildPropertyGrid.R"
+    "${RSCRIPT_BIN}" "${STAGE_ROOT}/buildPropertyGrid.R"
   ) > "${LOG_ROOT}/propertyGridShard_$(printf '%03d' "${shard_index}").log" 2>&1 &
 
   GRID_PIDS+=("$!")
@@ -164,7 +163,7 @@ done
   export PROPERTY_GRID_MERGE_INPUT_DIR="${GRID_SHARD_ROOT}"
   export PROPERTY_GRID_MERGE_OUTPUT_PATH="${OUTPUT_ROOT}/propertyGrid.gpkg"
 
-  "${RSCRIPT_BIN}" "${STAGE_ROOT}/code/HPC/buildPropertyGridMerge.R"
+  "${RSCRIPT_BIN}" "${STAGE_ROOT}/buildPropertyGridMerge.R"
 ) > "${LOG_ROOT}/propertyGridMerge.log" 2>&1
 
 wait "${ADJ_PID}"
