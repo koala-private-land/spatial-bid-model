@@ -8,16 +8,20 @@
 
 set -euo pipefail
 
-HOME_HPC_ROOT="${HOME_HPC_ROOT:-/home/n12135241/HPC}"
+SUBMIT_ROOT="${PBS_O_WORKDIR:-$(pwd)}"
+WORKFLOW_ROOT="${WORKFLOW_ROOT:-${SUBMIT_ROOT}}"
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${WORKFLOW_ROOT}/../.." && pwd)}"
+HOME_HPC_ROOT="${HOME_HPC_ROOT:-${PROJECT_ROOT}}"
 SCRATCH_BASE="${SCRATCH_BASE:-/scratch/n12135241_hpc}"
-RUN_ROOT="${SCRATCH_BASE}/run_${PBS_JOBID:-manual}/sean_code"
+RUN_ROOT="${SCRATCH_BASE}/run_${PBS_JOBID:-manual}/$(basename "${PROJECT_ROOT}")"
 
 mkdir -p "${SCRATCH_BASE}"
 mkdir -p "$(dirname "${RUN_ROOT}")"
-rsync -a --delete "${HOME_HPC_ROOT}/" "${RUN_ROOT}/"
+rsync -a --delete "${PROJECT_ROOT}/" "${RUN_ROOT}/"
 cd "${RUN_ROOT}"
 
-MANIFEST_PATH="${RUN_ROOT}/code/HPC/input/propertySpatialStagePaths.txt"
+WORKFLOW_RELATIVE_PATH="${WORKFLOW_RELATIVE_PATH:-code/HPC}"
+MANIFEST_PATH="${RUN_ROOT}/${WORKFLOW_RELATIVE_PATH}/input/propertySpatialStagePaths.txt"
 STAGE_ROOT="${RUN_ROOT}/property_spatial_stage"
 INPUT_ROOT="${STAGE_ROOT}/inputs"
 OUTPUT_ROOT="${STAGE_ROOT}/outputs"
@@ -118,6 +122,8 @@ else
 fi
 
 echo "Run root: ${RUN_ROOT}"
+echo "Workflow root: ${WORKFLOW_ROOT}"
+echo "Project root: ${PROJECT_ROOT}"
 echo "Stage root: ${STAGE_ROOT}"
 echo "Output root: ${OUTPUT_ROOT}"
 echo "Scratch root: ${SCRATCH_ROOT}"
