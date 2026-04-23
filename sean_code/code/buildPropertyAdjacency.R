@@ -12,6 +12,7 @@ if (dir.exists(userLibrary)) {
 
 library(sf)
 library(dplyr)
+library(parallel)
 
 sf_use_s2(FALSE)
 
@@ -53,6 +54,21 @@ readPropertyData <- function(propertyPath, propertyLayer) {
     arrange(PropID)
 }
 
+buildNeighborIndexChunk <- function(propertyIndices, propertyData) {
+  neighborIndexChunk <- st_intersects(
+    propertyData[propertyIndices, , drop = FALSE],
+    propertyData
+  )
+
+  lapply(
+    seq_along(neighborIndexChunk),
+    function(chunkPosition) {
+      propertyIndex <- propertyIndices[[chunkPosition]]
+      unique(sort(setdiff(neighborIndexChunk[[chunkPosition]], propertyIndex)))
+    }
+  )
+}
+
 buildAdjacencyList <- function(adjacencyConstants) {
   adjacencyList <- vector("list", adjacencyConstants$N)
   startPosition <- 1L
@@ -73,15 +89,40 @@ buildAdjacencyList <- function(adjacencyConstants) {
   adjacencyList
 }
 
-buildAdjacencyConstants <- function(propertyData) {
-  neighborIndexList <- st_intersects(propertyData)
+buildAdjacencyConstants <- function(propertyData, workerCount) {
+  if (workerCount <= 1) {
+    neighborIndexList <- buildNeighborIndexChunk(
+      propertyIndices = seq_len(nrow(propertyData)),
+      propertyData = propertyData
+    )
+  } else {
+    indexChunks <- splitIndices(nrow(propertyData), workerCount)
+    workerCluster <- makeCluster(length(indexChunks))
 
-  neighborIndexList <- lapply(
-    seq_along(neighborIndexList),
-    function(propertyIndex) {
-      unique(sort(setdiff(neighborIndexList[[propertyIndex]], propertyIndex)))
-    }
-  )
+    on.exit(stopCluster(workerCluster), add = TRUE)
+
+    clusterEvalQ(workerCluster, {
+      library(sf)
+      sf_use_s2(FALSE)
+      NULL
+    })
+
+    clusterExport(
+      workerCluster,
+      varlist = c("propertyData", "buildNeighborIndexChunk"),
+      envir = environment()
+    )
+
+    neighborIndexChunks <- parLapply(
+      workerCluster,
+      indexChunks,
+      function(propertyIndices) {
+        buildNeighborIndexChunk(propertyIndices, propertyData)
+      }
+    )
+
+    neighborIndexList <- unlist(neighborIndexChunks, recursive = FALSE, use.names = FALSE)
+  }
 
   neighborCount <- lengths(neighborIndexList)
   adjacencyVector <- unlist(neighborIndexList, use.names = FALSE)
@@ -135,8 +176,22 @@ validateAdjacencyConstants <- function(adjacencyConstants, propertyData) {
 }
 
 scriptPath <- getScriptPath()
-projectPath <- normalizePath(file.path(dirname(scriptPath), ".."), winslash = "/")
-inputPath <- file.path(projectPath, "inputs")
+projectPath <- normalizePath(
+  Sys.getenv(
+    "PROPERTY_ADJ_PROJECT_ROOT",
+    unset = file.path(dirname(scriptPath), "..")
+  ),
+  winslash = "/",
+  mustWork = FALSE
+)
+inputPath <- normalizePath(
+  Sys.getenv(
+    "PROPERTY_ADJ_INPUT_ROOT",
+    unset = file.path(projectPath, "inputs")
+  ),
+  winslash = "/",
+  mustWork = FALSE
+)
 
 lookupOutputPath <- Sys.getenv(
   "PROPERTY_ADJ_LOOKUP_OUTPUT_PATH",
@@ -149,6 +204,11 @@ constantsOutputPath <- Sys.getenv(
 )
 
 maxPropertyCount <- as.integer(Sys.getenv("PROPERTY_ADJ_MAX_PROPERTIES", unset = "0"))
+workerCount <- as.integer(Sys.getenv("PROPERTY_ADJ_WORKERS", unset = "1"))
+
+if (is.na(workerCount) || workerCount < 1) {
+  stop("PROPERTY_ADJ_WORKERS must be at least 1.")
+}
 
 if (file.exists(lookupOutputPath)) {
   stop(
@@ -197,7 +257,10 @@ if (!is.na(maxPropertyCount) && maxPropertyCount > 0) {
 
 message("Building adjacency constants")
 adjacencyBuildTime <- system.time({
-  adjacencyConstants <- buildAdjacencyConstants(propertyData)
+  adjacencyConstants <- buildAdjacencyConstants(
+    propertyData = propertyData,
+    workerCount = workerCount
+  )
 })
 
 message("Validating adjacency constants")
@@ -228,6 +291,7 @@ message("")
 message("Property adjacency build complete")
 message("Lookup output: ", lookupOutputPath)
 message("Constants output: ", constantsOutputPath)
+message("Workers: ", workerCount)
 message("Property count (N): ", adjacencyConstants$N)
 message("Adjacency length (L): ", adjacencyConstants$L)
 message("Zero-neighbor properties: ", sum(adjacencyConstants$num == 0))

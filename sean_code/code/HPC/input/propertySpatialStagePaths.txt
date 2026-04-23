@@ -1,0 +1,10 @@
+code/buildPropertyGrid.R
+code/buildPropertyAdjacency.R
+code/HPC/buildPropertyGridMerge.R
+inputs/properties/NSW_Property_Conservation_Availability_260128.gdb.zip
+inputs/study-area/NSW/NSW_epsg8058.cpg
+inputs/study-area/NSW/NSW_epsg8058.dbf
+inputs/study-area/NSW/NSW_epsg8058.prj
+inputs/study-area/NSW/NSW_epsg8058.qmd
+inputs/study-area/NSW/NSW_epsg8058.shp
+inputs/study-area/NSW/NSW_epsg8058.shx

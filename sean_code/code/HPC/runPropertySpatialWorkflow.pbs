@@ -1,0 +1,166 @@
+#!/bin/bash
+#PBS -N property_spatial
+#PBS -l walltime=48:00:00
+#PBS -l select=1:ncpus=24:mem=384gb
+#PBS -o property_spatial.out
+#PBS -j oe
+#PBS -m abe
+
+set -euo pipefail
+
+HOME_HPC_ROOT="${HOME_HPC_ROOT:-/home/n12135241/HPC}"
+SCRATCH_BASE="${SCRATCH_BASE:-/scratch/n12135241_hpc}"
+RUN_ROOT="${SCRATCH_BASE}/run_${PBS_JOBID:-manual}/sean_code"
+
+mkdir -p "${SCRATCH_BASE}"
+mkdir -p "$(dirname "${RUN_ROOT}")"
+rsync -a --delete "${HOME_HPC_ROOT}/" "${RUN_ROOT}/"
+cd "${RUN_ROOT}"
+
+MANIFEST_PATH="${RUN_ROOT}/code/HPC/input/propertySpatialStagePaths.txt"
+STAGE_ROOT="${RUN_ROOT}/property_spatial_stage"
+INPUT_ROOT="${STAGE_ROOT}/inputs"
+OUTPUT_ROOT="${STAGE_ROOT}/outputs"
+SCRATCH_ROOT="${STAGE_ROOT}/tmp"
+LOG_ROOT="${OUTPUT_ROOT}/logs"
+GRID_SHARD_ROOT="${OUTPUT_ROOT}/propertyGridShards"
+FINAL_OUTPUT_ROOT="${HOME_HPC_ROOT}/outputs"
+
+mkdir -p "$INPUT_ROOT" "$OUTPUT_ROOT" "$SCRATCH_ROOT" "$LOG_ROOT" "$GRID_SHARD_ROOT" "$FINAL_OUTPUT_ROOT"
+
+sync_back() {
+  mkdir -p "${FINAL_OUTPUT_ROOT}"
+
+  if [ -d "${OUTPUT_ROOT}" ]; then
+    rsync -a "${OUTPUT_ROOT}/" "${FINAL_OUTPUT_ROOT}/"
+  fi
+}
+trap sync_back EXIT
+
+module purge
+module load GCC/13.3.0
+module load OpenMPI/5.0.3
+module load GDAL/3.10.0
+module load GEOS/3.12.2
+module load CMake/3.29.3
+module load UDUNITS/2.2.28
+module load R/4.4.2
+
+RSCRIPT_BIN="${RSCRIPT_BIN:-$(command -v Rscript || true)}"
+if [ -z "${RSCRIPT_BIN}" ]; then
+  echo "Could not find Rscript after loading the HPC module stack." >&2
+  exit 127
+fi
+
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export R_LIBS_USER="${R_LIBS_USER:-/home/n12135241/R/x86_64-pc-linux-gnu-library/4.4}"
+mkdir -p "${R_LIBS_USER}"
+
+stage_path() {
+  local source_path="$1"
+  local destination_path="$2"
+
+  mkdir -p "$(dirname "$destination_path")"
+
+  if [ -d "$source_path" ]; then
+    mkdir -p "$destination_path"
+
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a "$source_path"/ "$destination_path"/
+    else
+      cp -R "$source_path"/. "$destination_path"/
+    fi
+  else
+    cp "$source_path" "$destination_path"
+  fi
+}
+
+while IFS= read -r relative_path; do
+  if [ -z "$relative_path" ]; then
+    continue
+  fi
+
+  case "$relative_path" in
+    \#*) continue ;;
+  esac
+
+  source_path="${RUN_ROOT}/${relative_path}"
+  destination_path="${STAGE_ROOT}/${relative_path}"
+
+  if [ ! -e "$source_path" ]; then
+    echo "Missing staged input: $source_path" >&2
+    exit 1
+  fi
+
+  stage_path "$source_path" "$destination_path"
+done < "$MANIFEST_PATH"
+
+TOTAL_CPUS="${PBS_NCPUS:-24}"
+
+if [ "$TOTAL_CPUS" -le 2 ]; then
+  GRID_SHARD_COUNT=1
+else
+  GRID_SHARD_COUNT="${GRID_SHARD_COUNT:-$((TOTAL_CPUS - 2))}"
+fi
+
+if [ "$GRID_SHARD_COUNT" -lt 1 ]; then
+  GRID_SHARD_COUNT=1
+fi
+
+if [ "$TOTAL_CPUS" -ge 8 ]; then
+  ADJ_WORKERS="${ADJ_WORKERS:-4}"
+elif [ "$TOTAL_CPUS" -ge 4 ]; then
+  ADJ_WORKERS="${ADJ_WORKERS:-2}"
+else
+  ADJ_WORKERS="${ADJ_WORKERS:-1}"
+fi
+
+echo "Run root: ${RUN_ROOT}"
+echo "Stage root: ${STAGE_ROOT}"
+echo "Output root: ${OUTPUT_ROOT}"
+echo "Scratch root: ${SCRATCH_ROOT}"
+echo "Grid shards: ${GRID_SHARD_COUNT}"
+echo "Adjacency workers: ${ADJ_WORKERS}"
+
+(
+  export PROPERTY_ADJ_PROJECT_ROOT="${STAGE_ROOT}"
+  export PROPERTY_ADJ_INPUT_ROOT="${INPUT_ROOT}"
+  export PROPERTY_ADJ_LOOKUP_OUTPUT_PATH="${OUTPUT_ROOT}/propertyAdjacencyLookup.csv"
+  export PROPERTY_ADJ_CONSTANTS_OUTPUT_PATH="${OUTPUT_ROOT}/propertyAdjacencyConstants.rds"
+  export PROPERTY_ADJ_WORKERS="${ADJ_WORKERS}"
+
+  "${RSCRIPT_BIN}" "${STAGE_ROOT}/code/buildPropertyAdjacency.R"
+) > "${LOG_ROOT}/propertyAdjacency.log" 2>&1 &
+ADJ_PID=$!
+
+GRID_PIDS=()
+for shard_index in $(seq 1 "${GRID_SHARD_COUNT}"); do
+  (
+    export PROPERTY_GRID_PROJECT_ROOT="${STAGE_ROOT}"
+    export PROPERTY_GRID_INPUT_ROOT="${INPUT_ROOT}"
+    export PROPERTY_GRID_SHARD_COUNT="${GRID_SHARD_COUNT}"
+    export PROPERTY_GRID_SHARD_INDEX="${shard_index}"
+    export PROPERTY_GRID_OUTPUT_PATH="${GRID_SHARD_ROOT}/propertyGridShard_$(printf '%03d' "${shard_index}").gpkg"
+
+    "${RSCRIPT_BIN}" "${STAGE_ROOT}/code/buildPropertyGrid.R"
+  ) > "${LOG_ROOT}/propertyGridShard_$(printf '%03d' "${shard_index}").log" 2>&1 &
+
+  GRID_PIDS+=("$!")
+done
+
+for grid_pid in "${GRID_PIDS[@]}"; do
+  wait "${grid_pid}"
+done
+
+(
+  export PROPERTY_GRID_MERGE_INPUT_DIR="${GRID_SHARD_ROOT}"
+  export PROPERTY_GRID_MERGE_OUTPUT_PATH="${OUTPUT_ROOT}/propertyGrid.gpkg"
+
+  "${RSCRIPT_BIN}" "${STAGE_ROOT}/code/HPC/buildPropertyGridMerge.R"
+) > "${LOG_ROOT}/propertyGridMerge.log" 2>&1
+
+wait "${ADJ_PID}"
+
+echo "Property spatial workflow complete"

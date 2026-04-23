@@ -168,8 +168,22 @@ writeGridChunk <- function(gridChunk, outputPath, appendLayer) {
 }
 
 scriptPath <- getScriptPath()
-projectPath <- normalizePath(file.path(dirname(scriptPath), ".."), winslash = "/")
-inputPath <- file.path(projectPath, "inputs")
+projectPath <- normalizePath(
+  Sys.getenv(
+    "PROPERTY_GRID_PROJECT_ROOT",
+    unset = file.path(dirname(scriptPath), "..")
+  ),
+  winslash = "/",
+  mustWork = FALSE
+)
+inputPath <- normalizePath(
+  Sys.getenv(
+    "PROPERTY_GRID_INPUT_ROOT",
+    unset = file.path(projectPath, "inputs")
+  ),
+  winslash = "/",
+  mustWork = FALSE
+)
 outputPath <- Sys.getenv(
   "PROPERTY_GRID_OUTPUT_PATH",
   unset = file.path(projectPath, "outputs", "propertyGrid.gpkg")
@@ -178,6 +192,16 @@ outputPath <- Sys.getenv(
 gridCellSizeMeters <- 100
 chunkSizeMeters <- as.numeric(Sys.getenv("PROPERTY_GRID_CHUNK_SIZE_METERS", unset = "25000"))
 maxChunkCount <- as.integer(Sys.getenv("PROPERTY_GRID_MAX_CHUNKS", unset = "0"))
+shardCount <- as.integer(Sys.getenv("PROPERTY_GRID_SHARD_COUNT", unset = "1"))
+shardIndex <- as.integer(Sys.getenv("PROPERTY_GRID_SHARD_INDEX", unset = "1"))
+
+if (is.na(shardCount) || shardCount < 1) {
+  stop("PROPERTY_GRID_SHARD_COUNT must be at least 1.")
+}
+
+if (is.na(shardIndex) || shardIndex < 1 || shardIndex > shardCount) {
+  stop("PROPERTY_GRID_SHARD_INDEX must be between 1 and PROPERTY_GRID_SHARD_COUNT.")
+}
 
 if (file.exists(outputPath)) {
   stop(
@@ -235,6 +259,22 @@ if (nrow(chunkIndex) == 0) {
 if (!is.na(maxChunkCount) && maxChunkCount > 0) {
   chunkIndex <- chunkIndex %>%
     slice_head(n = maxChunkCount)
+}
+
+chunkIndex <- chunkIndex[
+  ((seq_len(nrow(chunkIndex)) - 1L) %% shardCount) + 1L == shardIndex,
+  ,
+  drop = FALSE
+]
+
+if (nrow(chunkIndex) == 0) {
+  stop(
+    "No chunks assigned to shard ",
+    shardIndex,
+    " of ",
+    shardCount,
+    "."
+  )
 }
 
 stateBoundingBox <- st_bbox(nswBoundary)
@@ -305,6 +345,7 @@ if (writtenRowCount == 0) {
 message("")
 message("Property grid build complete")
 message("Output: ", outputPath)
+message("Shard: ", shardIndex, " of ", shardCount)
 message("Chunks indexed: ", nrow(chunkIndex))
 message("Chunks written: ", processedChunkCount)
 message("Rows written: ", writtenRowCount)
